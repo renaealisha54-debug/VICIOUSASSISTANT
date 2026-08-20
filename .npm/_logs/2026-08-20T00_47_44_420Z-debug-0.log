@@ -1,0 +1,27 @@
+0 verbose cli /data/data/com.termux/files/usr/bin/node /data/data/com.termux/files/usr/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@11.19.0
+2 info using node@v26.4.0
+3 silly config load:file:/data/data/com.termux/files/usr/lib/node_modules/npm/npmrc
+4 silly config load:file:/data/data/com.termux/files/home/.npmrc
+5 silly config load:file:/data/data/com.termux/files/usr/etc/npmrc
+6 verbose title npm exec cap sync android
+7 verbose argv "exec" "--" "cap" "sync" "android"
+8 verbose logfile logs-max:10 dir:/data/data/com.termux/files/home/.npm/_logs/2026-08-20T00_47_44_420Z-
+9 verbose logfile /data/data/com.termux/files/home/.npm/_logs/2026-08-20T00_47_44_420Z-debug-0.log
+10 silly logfile done cleaning log files
+11 silly packumentCache heap:1174405120 maxSize:293601280 maxEntrySize:146800640
+12 http fetch GET 200 https://registry.npmjs.org/cap 535ms (cache miss)
+13 verbose stack Error: could not determine executable to run
+13 verbose stack     at getBinFromManifest (/data/data/com.termux/files/usr/lib/node_modules/npm/node_modules/libnpmexec/lib/get-bin-from-manifest.js:17:23)
+13 verbose stack     at exec (/data/data/com.termux/files/usr/lib/node_modules/npm/node_modules/libnpmexec/lib/index.js:223:15)
+13 verbose stack     at async Npm.exec (/data/data/com.termux/files/usr/lib/node_modules/npm/lib/npm.js:193:9)
+13 verbose stack     at async module.exports (/data/data/com.termux/files/usr/lib/node_modules/npm/lib/cli/entry.js:67:5)
+14 verbose pkgid cap@0.2.1
+15 error could not determine executable to run
+16 verbose cwd /data/data/com.termux/files/home
+17 verbose os Linux 5.15.189-android13-3-33470412
+18 verbose node v26.4.0
+19 verbose npm  v11.19.0
+20 verbose exit 1
+21 verbose code 1
+22 error A complete log of this run can be found in: /data/data/com.termux/files/home/.npm/_logs/2026-08-20T00_47_44_420Z-debug-0.log

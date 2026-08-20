@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 200 13% 12%;
+    --foreground: 0 0% 100%;
+    --card: 200 13% 15%;
+    --card-foreground: 0 0% 100%;
+    --popover: 200 13% 12%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 209 100% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 13% 20%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 200 13% 25%;
+    --muted-foreground: 200 10% 70%;
+    --accent: 180 84% 67%;
+    --accent-foreground: 200 13% 12%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 200 13% 25%;
+    --input: 200 13% 25%;
+    --ring: 209 100% 58%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased selection:bg-primary/30;
+    background-image: radial-gradient(circle at 50% 50%, rgba(40, 150, 255, 0.05) 0%, transparent 50%);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline tracking-tight;
+  }
+}
+
+.vicious-glow {
+  box-shadow: 0 0 15px rgba(40, 150, 255, 0.4);
+}
+
+.vicious-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+.vicious-glass {
+  @apply bg-card/60 backdrop-blur-md border border-white/10;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full hover:bg-muted-foreground transition-colors;
+}

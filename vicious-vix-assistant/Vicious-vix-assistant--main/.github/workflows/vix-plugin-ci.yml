@@ -1,0 +1,46 @@
+name: Vix Plugin CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vix-plugin/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'vix-plugin/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vix-plugin
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: vix-plugin/package.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax check
+        run: |
+          node --check index.js
+          node --check test.js
+
+      - name: Run test script
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: node test.js
