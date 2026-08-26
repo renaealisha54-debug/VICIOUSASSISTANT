@@ -1,3 +1,27 @@
-node_modules/
-.gradle/
-*.jar
+# Node
+**/node_modules/
+**/npm-debug.log*
+
+# Next.js
+**/.next/
+**/out/
+
+# Android / Gradle
+**/android/local.properties
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+**/android/.idea/
+**/android/captures/
+**/*.apk
+**/*.aab
+**/*.jks
+**/*.keystore
+
+# Env / secrets
+**/.env
+**/.env.local
+**/.env*.local
+
+# OS junk
+**/.DS_Store
