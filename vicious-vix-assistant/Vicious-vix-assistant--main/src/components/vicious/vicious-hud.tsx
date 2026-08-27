@@ -6,8 +6,30 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import VixAccessibility, { VixDiagnosticEntry } from '@/lib/vix-accessibility';
+import { ShieldAlert, RefreshCw } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Text size scale — applied to the document root so all rem-based Tailwind
+// sizing throughout the app scales together
+// ---------------------------------------------------------------------------
+type TextSize = 'small' | 'medium' | 'large' | 'xlarge';
+const TEXT_SIZE_PX: Record<TextSize, string> = {
+  small: '14px',
+  medium: '16px',
+  large: '18px',
+  xlarge: '20px',
+};
+
+type ActivationLogEntry = {
+  id: string;
+  timestamp: string; // ISO string
+  source: 'voice' | 'text';
+  text: string;
+};
 
 // ---------------------------------------------------------------------------
 // Groq REST helper — replaces all Genkit server actions
@@ -53,6 +75,12 @@ export function ViciousHUD() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [reminders, setReminders] = useState<{ id: string; text: string; time?: string; date?: string }[]>([]);
   const [apiKey, setApiKey] = useState('');
+  const [textSize, setTextSize] = useState<TextSize>('medium');
+  const [vocalResponses, setVocalResponses] = useState(false);
+  const [activationLog, setActivationLog] = useState<ActivationLogEntry[]>([]);
+  const [watcherEnabled, setWatcherEnabled] = useState<boolean | null>(null);
+  const [diagnosticLog, setDiagnosticLog] = useState<VixDiagnosticEntry[]>([]);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
   const { toast } = useToast();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -92,6 +120,15 @@ export function ViciousHUD() {
 
     const savedReminders = localStorage.getItem('vicious_reminders');
     if (savedReminders) setReminders(JSON.parse(savedReminders));
+
+    const savedTextSize = localStorage.getItem('vicious_text_size') as TextSize | null;
+    if (savedTextSize) setTextSize(savedTextSize);
+
+    const savedVocal = localStorage.getItem('vicious_vocal_responses');
+    if (savedVocal) setVocalResponses(savedVocal === 'true');
+
+    const savedLog = localStorage.getItem('vicious_activation_log');
+    if (savedLog) setActivationLog(JSON.parse(savedLog));
   }, []);
 
   useEffect(() => {
@@ -103,17 +140,142 @@ export function ViciousHUD() {
     localStorage.setItem('vicious_reminders', JSON.stringify(reminders));
   }, [reminders]);
 
+  // Apply text size to the document root so rem-based Tailwind classes scale app-wide
+  useEffect(() => {
+    document.documentElement.style.fontSize = TEXT_SIZE_PX[textSize];
+    localStorage.setItem('vicious_text_size', textSize);
+  }, [textSize]);
+
+  useEffect(() => {
+    localStorage.setItem('vicious_vocal_responses', String(vocalResponses));
+  }, [vocalResponses]);
+
+  useEffect(() => {
+    localStorage.setItem('vicious_activation_log', JSON.stringify(activationLog));
+  }, [activationLog]);
+
+  const speak = (text: string) => {
+    if (!vocalResponses) return;
+    if (!('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel(); // don't stack overlapping utterances
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      // speech synthesis unsupported/blocked — fail silently
+    }
+  };
+
+  const refreshWatcherStatus = async () => {
+    setDiagnosticLoading(true);
+    try {
+      const { enabled } = await VixAccessibility.isEnabled();
+      setWatcherEnabled(enabled);
+    } catch {
+      setWatcherEnabled(null); // native plugin unavailable (e.g. running in a plain browser)
+    }
+    try {
+      const { entries } = await VixAccessibility.getLog();
+      setDiagnosticLog(entries);
+    } catch {
+      // leave diagnosticLog as-is
+    }
+    setDiagnosticLoading(false);
+  };
+
+  // Refresh watcher status/log whenever the Settings tab is opened
+  useEffect(() => {
+    if (activeTab === 'system') {
+      refreshWatcherStatus();
+    }
+  }, [activeTab]);
+
+  const logActivation = (source: 'voice' | 'text', text: string) => {
+    setActivationLog(prev => [
+      { id: Math.random().toString(36).substring(7), timestamp: new Date().toISOString(), source, text },
+      ...prev,
+    ].slice(0, 100)); // keep the log from growing unbounded
+  };
+
   const addMessage = (role: 'user' | 'assistant' | 'system', content: string, type: Message['type'] = 'text') => {
     setMessages(prev => [...prev, {
       id: Math.random().toString(36).substring(7),
       role, content, timestamp: new Date(), type,
     }]);
+    if (role === 'assistant') speak(content);
   };
 
-  const handleCommand = async (text: string) => {
+  // ---------------------------------------------------------------------------
+  // Real device actions — hands off to the actual browser, maps, or dialer app
+  // via Capacitor's documented window.open(url, '_system') system intent bridge
+  // ---------------------------------------------------------------------------
+  const openSystem = (url: string) => {
+    window.open(url, '_system');
+  };
+
+  /** Returns a short confirmation message if it handled the command, or null if not. */
+  const tryDeviceAction = (text: string): string | null => {
+    const lower = text.toLowerCase().trim();
+
+    // "call 555-1234" / "dial mom" (only matches actual number-like targets)
+    const callMatch = lower.match(/\b(?:call|dial|phone)\s+([\d()+\-.\s]{6,})$/);
+    if (callMatch) {
+      const digits = callMatch[1].replace(/[^\d+]/g, '');
+      openSystem(`tel:${digits}`);
+      return `Opening dialer for ${callMatch[1].trim()}...`;
+    }
+
+    // "navigate to central park" / "directions to 123 main st" / "map the eiffel tower"
+    const navMatch = text.match(/^(?:navigate to|directions to|take me to|drive to|map)\s+(.+)/i);
+    if (navMatch) {
+      const destination = navMatch[1].trim();
+      openSystem(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`);
+      return `Opening directions to "${destination}"...`;
+    }
+
+    // "github" / "repo" — opens the real site (no fake sync claims)
+    if (lower.includes('github') || lower.includes('repo')) {
+      openSystem('https://github.com');
+      return 'Opening GitHub in your browser...';
+    }
+
+    // "open <url or site>" / "go to <url or site>"
+    const openMatch = text.match(/^(?:open|go to)\s+(.+)/i);
+    if (openMatch) {
+      const target = openMatch[1].trim();
+      const looksLikeUrl = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(target);
+      if (looksLikeUrl) {
+        const url = target.startsWith('http') ? target : `https://${target}`;
+        openSystem(url);
+        return `Opening ${target}...`;
+      }
+      openSystem(`https://www.google.com/search?q=${encodeURIComponent(target)}`);
+      return `Searching for "${target}"...`;
+    }
+
+    // "search <query>" / "search for <query>"
+    const searchMatch = text.match(/^search(?: for)?\s+(.+)/i);
+    if (searchMatch) {
+      const query = searchMatch[1].trim();
+      openSystem(`https://www.google.com/search?q=${encodeURIComponent(query)}`);
+      return `Searching for "${query}"...`;
+    }
+
+    return null;
+  };
+
+  const handleCommand = async (text: string, source: 'voice' | 'text' = 'text') => {
     if (!text.trim()) return;
     addMessage('user', text);
     setInputValue('');
+    logActivation(source, text);
+
+    // Device actions run even without an API key — they don't call the LLM
+    const deviceResult = tryDeviceAction(text);
+    if (deviceResult) {
+      addMessage('assistant', deviceResult);
+      return;
+    }
 
     if (!apiKey) {
       addMessage('system', 'API key not set. Go to Settings and enter your Groq key.');
@@ -143,11 +305,6 @@ export function ViciousHUD() {
         } catch {
           addMessage('assistant', result);
         }
-      } else if (lowerText.startsWith('open ') || lowerText.includes('run ')) {
-        addMessage('system', `System: Accessing platform API... Executing command on ${text.split(' ').slice(1).join(' ')}`, 'command');
-        addMessage('assistant', 'Acknowledged. Interface linked. Monitoring execution.');
-      } else if (lowerText.includes('github') || lowerText.includes('repo')) {
-        addMessage('assistant', "Establishing secure tunnel to GitHub. Repo 'vicious-core' synchronized. Ready for mutation.");
       } else {
         const response = await askGroq(
           `You are Vicious Assistant, a sleek AI. Answer concisely: ${text}`,
@@ -171,7 +328,7 @@ export function ViciousHUD() {
     recognition.lang = 'en-US';
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onresult = (event: any) => handleCommand(event.results[0][0].transcript);
+    recognition.onresult = (event: any) => handleCommand(event.results[0][0].transcript, 'voice');
     recognition.start();
   };
 
@@ -246,7 +403,7 @@ export function ViciousHUD() {
         {/* Sidebar */}
         <nav className="w-20 border-r flex flex-col items-center py-6 gap-6">
           <NavItem icon={MessageSquare} active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
-          <NavItem icon={Bell} active={activeTab === 'reminders'} onClick={() => setActiveTab('chat')} count={reminders.length} />
+          <NavItem icon={Bell} active={activeTab === 'reminders'} onClick={() => setActiveTab('reminders')} count={reminders.length} />
           <NavItem icon={Camera} active={activeTab === 'camera'} onClick={openCamera} />
           <NavItem icon={Settings} active={activeTab === 'system'} onClick={() => setActiveTab('system')} />
         </nav>
@@ -280,6 +437,165 @@ export function ViciousHUD() {
                   }}
                   className="bg-card/80 border-white/10"
                 />
+              </div>
+
+              {/* Text size */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Text Size</label>
+                <div className="flex gap-2">
+                  {(['small', 'medium', 'large', 'xlarge'] as TextSize[]).map(size => (
+                    <Button
+                      key={size}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTextSize(size)}
+                      className={cn(
+                        'flex-1 border-white/10 capitalize',
+                        textSize === size ? 'bg-primary text-white border-primary' : 'bg-card/80'
+                      )}
+                    >
+                      {size === 'xlarge' ? 'X-Large' : size}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Vocal responses */}
+              <div className="flex items-center justify-between rounded-lg border border-white/10 bg-card/80 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Vocal Responses</p>
+                  <p className="text-xs text-muted-foreground">Speak assistant replies aloud</p>
+                </div>
+                <Switch checked={vocalResponses} onCheckedChange={setVocalResponses} />
+              </div>
+
+              {/* Activation log */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Activation Log</label>
+                  {activationLog.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs text-muted-foreground hover:text-white"
+                      onClick={() => setActivationLog([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <ScrollArea className="h-56 rounded-lg border border-white/10 bg-card/80">
+                  <div className="p-3 space-y-2">
+                    {activationLog.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No activations yet.</p>
+                    ) : (
+                      activationLog.map(entry => (
+                        <div key={entry.id} className="flex items-start gap-2 text-xs border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                          <span className={cn(
+                            'shrink-0 rounded px-1.5 py-0.5 font-mono uppercase text-[10px]',
+                            entry.source === 'voice' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground'
+                          )}>
+                            {entry.source}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-foreground/90">{entry.text}</p>
+                            <p className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              {/* Accessibility watcher status + diagnostic log */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Accessibility Watcher</label>
+                  <div className="flex items-center gap-2">
+                    {diagnosticLog.length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs text-muted-foreground hover:text-white"
+                        onClick={async () => {
+                          try { await VixAccessibility.clearLog(); } catch {}
+                          setDiagnosticLog([]);
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-white"
+                      onClick={refreshWatcherStatus}
+                    >
+                      <RefreshCw className={cn('w-3.5 h-3.5', diagnosticLoading && 'animate-spin')} />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-card/80 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className={cn('w-4 h-4', watcherEnabled ? 'text-primary' : 'text-muted-foreground')} />
+                    <div>
+                      <p className="text-sm font-medium">
+                        {watcherEnabled === null ? 'Status unknown' : watcherEnabled ? 'Enabled' : 'Disabled'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Watches every foreground app for stalls; logs why and how to fix it
+                      </p>
+                    </div>
+                  </div>
+                  {!watcherEnabled && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 shrink-0"
+                      onClick={() => VixAccessibility.openSettings().catch(() => {})}
+                    >
+                      Enable
+                    </Button>
+                  )}
+                </div>
+
+                <ScrollArea className="h-64 rounded-lg border border-white/10 bg-card/80">
+                  <div className="p-3 space-y-3">
+                    {diagnosticLog.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No interventions logged yet.</p>
+                    ) : (
+                      diagnosticLog.map(entry => (
+                        <div key={entry.id} className="text-xs border-b border-white/5 pb-3 last:border-0 last:pb-0 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-primary truncate">{entry.packageName}</span>
+                            <span className="text-muted-foreground shrink-0 ml-2">
+                              idle {Math.round(entry.idleMs / 1000)}s
+                            </span>
+                          </div>
+                          <p className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
+                          {entry.typedReply && (
+                            <p className="text-foreground/90">
+                              <span className="text-muted-foreground">Typed: </span>
+                              {entry.typedReply}
+                            </p>
+                          )}
+                          {entry.diagnosis && (
+                            <p className="text-yellow-300/90">
+                              <span className="text-muted-foreground">Diagnosis: </span>
+                              {entry.diagnosis}
+                            </p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </ScrollArea>
               </div>
             </div>
           ) : (

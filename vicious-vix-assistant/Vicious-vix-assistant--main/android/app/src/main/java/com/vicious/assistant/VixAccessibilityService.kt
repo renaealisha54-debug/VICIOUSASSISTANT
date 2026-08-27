@@ -18,15 +18,22 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.UUID
 
 /**
  * Watches WHICHEVER app is currently in the foreground for UI-freeze
  * (no content change for DELAY_THRESHOLD_MS) — no package name needs to
- * be configured. On a detected freeze, asks Groq for a short fallback
- * response.
+ * be configured. On a detected freeze it:
+ *   1. Types a short fallback reply into the currently focused field
+ *   2. Logs a developer-facing diagnosis (why it likely stalled + a fix to try)
+ *      to VixLogStore, readable from the app's Settings screen.
  *
  * NOTE: this can only detect a *proxy* for "hasn't responded" — unchanged
- * screen content. It cannot inspect any app's internal AI state.
+ * screen content. It cannot inspect any app's internal AI/logic state.
+ * It is intentionally unscoped (watches every foreground app, not just one) —
+ * this was a deliberate choice, not an oversight; know that it will act on
+ * ANY app that goes idle for the threshold window, not just the one you're
+ * developing.
  */
 class VixAccessibilityService : AccessibilityService() {
 
@@ -61,7 +68,7 @@ class VixAccessibilityService : AccessibilityService() {
             if (currentPackage == pkg) {
                 val idleFor = System.currentTimeMillis() - lastChangeAt
                 if (idleFor >= DELAY_THRESHOLD_MS) {
-                    onResponseDelayDetected(pkg)
+                    onResponseDelayDetected(pkg, idleFor)
                 }
             }
         }
@@ -70,16 +77,56 @@ class VixAccessibilityService : AccessibilityService() {
     }
 
     /** Called when the current foreground app has shown no UI change for the threshold window. */
-    private fun onResponseDelayDetected(pkg: String) {
-        askGroq("The app $pkg seems to be taking a while to respond. In one short sentence, suggest what the user could try next.") { reply ->
-            if (reply != null) {
-                typeIntoFocusedField(reply)
+    private fun onResponseDelayDetected(pkg: String, idleMs: Long) {
+        askGroqDiagnosis(pkg, idleMs) { userReply, diagnosis ->
+            if (userReply != null) {
+                typeIntoFocusedField(userReply)
             }
+            VixLogStore.append(
+                applicationContext,
+                VixLogEntry(
+                    id = UUID.randomUUID().toString(),
+                    timestamp = System.currentTimeMillis(),
+                    packageName = pkg,
+                    idleMs = idleMs,
+                    typedReply = userReply,
+                    diagnosis = diagnosis
+                )
+            )
         }
     }
 
-    /** Fire-and-callback Groq chat completion request. */
-    private fun askGroq(prompt: String, onResult: (String?) -> Unit) {
+    /**
+     * Asks Groq for two things at once: a short safe reply to type into the
+     * stalled field, and a developer-facing diagnosis of why it likely stalled.
+     * If the network call fails outright (offline), still logs a useful
+     * local, template-based diagnosis instead of losing the event.
+     */
+    private fun askGroqDiagnosis(pkg: String, idleMs: Long, onResult: (String?, String?) -> Unit) {
+        if (GROQ_API_KEY.isBlank()) {
+            handler.post {
+                onResult(
+                    null,
+                    "No GROQ_API_KEY configured (set it in android/local.properties). " +
+                        "Local pattern only: $pkg showed no UI change for ${idleMs}ms — " +
+                        "check for a promise/callback with no timeout, a blocked main thread, " +
+                        "or a loading state that never gets cleared."
+                )
+            }
+            return
+        }
+
+        val prompt = """
+            You are Vix, an on-device watchdog for an app under development (package: $pkg).
+            Its UI has shown no change for ${idleMs}ms, which usually means the app's own
+            response logic is stuck, looping, or never returned a result.
+            Respond with ONLY a JSON object, no other text, no markdown fences:
+            {
+              "userReply": "a short, generic, safe message to type into the current field so the user isn't left staring at nothing",
+              "diagnosis": "1-2 sentences for the DEVELOPER of this app: the likely code-level cause (e.g. unresolved promise, missing timeout/fallback branch, infinite loop, blocked main thread, unhandled network error) and a concrete fix to try"
+            }
+        """.trimIndent()
+
         val body = JSONObject().apply {
             put("model", GROQ_MODEL)
             put("messages", JSONArray().put(
@@ -99,22 +146,38 @@ class VixAccessibilityService : AccessibilityService() {
         httpClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e(TAG, "Groq request failed", e)
-                handler.post { onResult(null) }
+                // Offline / network-failure fallback — still log something useful
+                handler.post {
+                    onResult(
+                        null,
+                        "Network unreachable — could not reach Groq for a diagnosis. " +
+                            "Local pattern only: $pkg showed no UI change for ${idleMs}ms — " +
+                            "check for a hung network call, an unresolved async task with no " +
+                            "timeout, or a loading state that never gets cleared."
+                    )
+                }
             }
 
             override fun onResponse(call: Call, response: okhttp3.Response) {
                 val text = response.body?.string()
-                val reply = try {
-                    JSONObject(text ?: "{}")
+                var userReply: String? = null
+                var diagnosis: String? = null
+                try {
+                    val content = JSONObject(text ?: "{}")
                         .getJSONArray("choices")
                         .getJSONObject(0)
                         .getJSONObject("message")
                         .getString("content")
+                    val cleaned = content.replace("```json", "").replace("```", "").trim()
+                    val parsed = JSONObject(cleaned)
+                    userReply = parsed.optString("userReply").ifEmpty { null }
+                    diagnosis = parsed.optString("diagnosis").ifEmpty { null }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to parse Groq response", e)
-                    null
+                    diagnosis = "Groq responded but the diagnosis couldn't be parsed. " +
+                        "$pkg showed no UI change for ${idleMs}ms."
                 }
-                handler.post { onResult(reply) }
+                handler.post { onResult(userReply, diagnosis) }
             }
         })
     }
