@@ -340,7 +340,7 @@ export function ViciousHUD() {
     canvasRef.current.height = videoRef.current.videoHeight;
     context.drawImage(videoRef.current, 0, 0);
     const dataUri = canvasRef.current.toDataURL('image/jpeg');
-    setIsCameraOpen(false);
+    stopCamera();
     addMessage('user', 'Analyzing captured image...', 'image');
     try {
       const base64 = dataUri.split(',')[1];
@@ -365,11 +365,21 @@ export function ViciousHUD() {
     }
   };
 
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = () => {
+    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
+    cameraStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setIsCameraOpen(false);
+  };
+
   const openCamera = async () => {
     setIsCameraOpen(true);
     setActiveTab('camera');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      cameraStreamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
     } catch {
       toast({ title: 'Camera permission denied', variant: 'destructive' });
@@ -598,6 +608,39 @@ export function ViciousHUD() {
                 </ScrollArea>
               </div>
             </div>
+          ) : activeTab === 'reminders' ? (
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto">
+              <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Reminders</h2>
+              {reminders.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No reminders yet. Try saying or typing something like "remind me to call mom at 5pm".
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {reminders.map(r => (
+                    <Card key={r.id} className="p-4 border-white/5 bg-[#1c2226] flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-foreground">{r.text}</p>
+                        {(r.time || r.date) && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {[r.date, r.time].filter(Boolean).join(' \u00b7 ')}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-white"
+                        onClick={() => setReminders(prev => prev.filter(item => item.id !== r.id))}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <ScrollArea className="flex-1 p-6" viewportRef={scrollRef}>
@@ -641,7 +684,7 @@ export function ViciousHUD() {
                 <div className="absolute inset-0 bg-black z-50 flex flex-col items-center justify-center">
                   <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
                   <canvas ref={canvasRef} className="hidden" />
-                  <Button className="absolute top-6 right-6" variant="ghost" size="icon" onClick={() => setIsCameraOpen(false)}>
+                  <Button className="absolute top-6 right-6" variant="ghost" size="icon" onClick={stopCamera}>
                     <X className="w-6 h-6 text-white" />
                   </Button>
                   <Button className="absolute bottom-12 w-20 h-20 rounded-full bg-white" onClick={captureImage} />
