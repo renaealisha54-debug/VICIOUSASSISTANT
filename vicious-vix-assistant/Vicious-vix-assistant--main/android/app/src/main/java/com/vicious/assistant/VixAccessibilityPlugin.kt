@@ -1,17 +1,29 @@
 package com.vicious.assistant
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.text.TextUtils
+import androidx.core.content.ContextCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 
-@CapacitorPlugin(name = "VixAccessibility")
+@CapacitorPlugin(
+    name = "VixAccessibility",
+    permissions = [
+        Permission(strings = [Manifest.permission.RECORD_AUDIO], alias = "microphone")
+    ]
+)
 class VixAccessibilityPlugin : Plugin() {
 
     @PluginMethod
@@ -71,6 +83,67 @@ class VixAccessibilityPlugin : Plugin() {
     @PluginMethod
     fun clearLog(call: PluginCall) {
         VixLogStore.clear(context)
+        call.resolve()
+    }
+
+    // --- Floating bubble ---------------------------------------------------
+
+    @PluginMethod
+    fun isOverlayEnabled(call: PluginCall) {
+        val ret = JSObject()
+        ret.put("enabled", Settings.canDrawOverlays(context))
+        call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun requestOverlayPermission(call: PluginCall) {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        )
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun startOverlay(call: PluginCall) {
+        if (!Settings.canDrawOverlays(context)) {
+            call.reject("Overlay permission not granted")
+            return
+        }
+        val micGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!micGranted) {
+            // Bubble still works without the mic (text field still works) —
+            // ask for the mic permission but don't block starting the bubble on it.
+            requestPermissionForAlias("microphone", call, "micPermsCallback")
+            return
+        }
+        launchOverlayService()
+        call.resolve()
+    }
+
+    @PermissionCallback
+    private fun micPermsCallback(call: PluginCall) {
+        launchOverlayService()
+        call.resolve()
+    }
+
+    private fun launchOverlayService() {
+        val intent = Intent(context, VixOverlayService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    @PluginMethod
+    fun stopOverlay(call: PluginCall) {
+        context.stopService(Intent(context, VixOverlayService::class.java))
         call.resolve()
     }
 

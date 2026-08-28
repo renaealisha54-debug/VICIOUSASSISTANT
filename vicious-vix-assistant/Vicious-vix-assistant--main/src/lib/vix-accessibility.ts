@@ -15,6 +15,10 @@ export interface VixAccessibilityPluginInterface {
   getLog(): Promise<{ entries: VixDiagnosticEntry[] }>;
   clearLog(): Promise<void>;
   openApp(options: { packageNames: string[] }): Promise<{ opened: boolean; packageName?: string }>;
+  isOverlayEnabled(): Promise<{ enabled: boolean }>;
+  requestOverlayPermission(): Promise<void>;
+  startOverlay(): Promise<void>;
+  stopOverlay(): Promise<void>;
 }
 
 // On native Android this resolves to the real VixAccessibilityPlugin.kt.

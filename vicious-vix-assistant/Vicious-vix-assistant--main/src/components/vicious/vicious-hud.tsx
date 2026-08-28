@@ -81,6 +81,9 @@ export function ViciousHUD() {
   const [watcherEnabled, setWatcherEnabled] = useState<boolean | null>(null);
   const [diagnosticLog, setDiagnosticLog] = useState<VixDiagnosticEntry[]>([]);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [overlayPermissionGranted, setOverlayPermissionGranted] = useState<boolean | null>(null);
+  const [bubbleActive, setBubbleActive] = useState(false);
+  const [bubbleBusy, setBubbleBusy] = useState(false);
   const { toast } = useToast();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -187,8 +190,27 @@ export function ViciousHUD() {
   useEffect(() => {
     if (activeTab === 'system') {
       refreshWatcherStatus();
+      VixAccessibility.isOverlayEnabled()
+        .then(({ enabled }) => setOverlayPermissionGranted(enabled))
+        .catch(() => setOverlayPermissionGranted(null));
     }
   }, [activeTab]);
+
+  const toggleBubble = async () => {
+    setBubbleBusy(true);
+    try {
+      if (bubbleActive) {
+        await VixAccessibility.stopOverlay();
+        setBubbleActive(false);
+      } else {
+        await VixAccessibility.startOverlay();
+        setBubbleActive(true);
+      }
+    } catch {
+      toast({ title: 'Could not toggle the floating bubble', variant: 'destructive' });
+    }
+    setBubbleBusy(false);
+  };
 
   const logActivation = (source: 'voice' | 'text', text: string) => {
     setActivationLog(prev => [
@@ -647,6 +669,46 @@ export function ViciousHUD() {
                     )}
                   </div>
                 </ScrollArea>
+              </div>
+
+              {/* Floating bubble */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Floating Bubble</label>
+                <div className="flex items-center justify-between rounded-lg border border-white/10 bg-card/80 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {overlayPermissionGranted === null
+                        ? 'Status unknown'
+                        : overlayPermissionGranted
+                        ? 'Permission granted'
+                        : 'Permission needed'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      A draggable bubble for quick commands without switching back to Vicious
+                    </p>
+                  </div>
+                  {!overlayPermissionGranted && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 shrink-0"
+                      onClick={() => VixAccessibility.requestOverlayPermission().catch(() => {})}
+                    >
+                      Enable
+                    </Button>
+                  )}
+                </div>
+                {overlayPermissionGranted && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-white/10"
+                    disabled={bubbleBusy}
+                    onClick={toggleBubble}
+                  >
+                    {bubbleBusy ? 'Working...' : bubbleActive ? 'Stop Bubble' : 'Start Bubble'}
+                  </Button>
+                )}
               </div>
             </div>
           ) : activeTab === 'reminders' ? (
