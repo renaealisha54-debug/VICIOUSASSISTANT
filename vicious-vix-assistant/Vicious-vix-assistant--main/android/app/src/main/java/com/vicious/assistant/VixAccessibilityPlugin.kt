@@ -15,6 +15,26 @@ import com.getcapacitor.annotation.CapacitorPlugin
 class VixAccessibilityPlugin : Plugin() {
 
     @PluginMethod
+    fun openApp(call: PluginCall) {
+        val candidates = call.getArray("packageNames")?.toList<String>() ?: emptyList()
+        for (pkg in candidates) {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(launchIntent)
+                val ret = JSObject()
+                ret.put("opened", true)
+                ret.put("packageName", pkg)
+                call.resolve(ret)
+                return
+            }
+        }
+        val ret = JSObject()
+        ret.put("opened", false)
+        call.resolve(ret)
+    }
+
+    @PluginMethod
     fun isEnabled(call: PluginCall) {
         val ret = JSObject()
         ret.put("enabled", isAccessibilityServiceEnabled())

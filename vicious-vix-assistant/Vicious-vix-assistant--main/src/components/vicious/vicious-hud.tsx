@@ -214,8 +214,36 @@ export function ViciousHUD() {
   };
 
   /** Returns a short confirmation message if it handled the command, or null if not. */
-  const tryDeviceAction = (text: string): string | null => {
+  const GITHUB_USERNAME = 'renaealisha54-debug';
+  const DEFAULT_GITHUB_REPO = 'VICIOUSASSISTANT';
+
+  const tryDeviceAction = async (text: string): Promise<string | null> => {
     const lower = text.toLowerCase().trim();
+
+    // "open camera" / "launch camera" / "take a photo" — use the app's own
+    // camera capture screen (same one the Camera nav icon opens), not a search
+    if (/^(?:open|launch|start)\s+(?:the\s+)?camera$/i.test(lower) || /take a (?:photo|picture|pic)/i.test(lower)) {
+      openCamera();
+      return 'Opening camera...';
+    }
+
+    // "open files" / "open file manager" — launches the real device file manager
+    if (/^(?:open|launch|start)\s+(?:the\s+)?(?:files|file manager|my files)$/i.test(lower)) {
+      try {
+        const result = await VixAccessibility.openApp({
+          packageNames: [
+            'com.sec.android.app.myfiles',        // Samsung My Files
+            'com.google.android.apps.nbu.files',  // Google Files
+            'com.android.documentsui',            // AOSP Files
+            'com.mi.android.globalFileexplorer',  // Xiaomi
+          ],
+        });
+        if (result.opened) return 'Opening your file manager...';
+      } catch {
+        // native plugin unavailable (e.g. web preview)
+      }
+      return "Couldn't find a file manager app to open on this device.";
+    }
 
     // "call 555-1234" / "dial mom" (only matches actual number-like targets)
     const callMatch = lower.match(/\b(?:call|dial|phone)\s+([\d()+\-.\s]{6,})$/);
@@ -233,8 +261,21 @@ export function ViciousHUD() {
       return `Opening directions to "${destination}"...`;
     }
 
-    // "github" / "repo" — opens the real site (no fake sync claims)
-    if (lower.includes('github') || lower.includes('repo')) {
+    // "open the vicious repo" / "go to my weather-app repository" / "open repository"
+    // (with no name given, defaults to the project repo this app itself lives in)
+    if (lower.includes('repo') || lower.includes('repository')) {
+      const named =
+        text.match(/\b(?:repo|repository)\s+(?:named|called)?\s*["']?([\w.-]+)["']?/i) ||
+        text.match(/["']?([\w.-]+)["']?\s+(?:repo|repository)\b/i);
+      const stopwords = ['my', 'the', 'github', 'a', 'this', 'that', 'open', 'go'];
+      const repoName =
+        named?.[1] && !stopwords.includes(named[1].toLowerCase()) ? named[1] : DEFAULT_GITHUB_REPO;
+      openSystem(`https://github.com/${GITHUB_USERNAME}/${repoName}`);
+      return `Opening the ${repoName} repository...`;
+    }
+
+    // "github" — opens the real site (no fake sync claims)
+    if (lower.includes('github')) {
       openSystem('https://github.com');
       return 'Opening GitHub in your browser...';
     }
@@ -271,7 +312,7 @@ export function ViciousHUD() {
     logActivation(source, text);
 
     // Device actions run even without an API key — they don't call the LLM
-    const deviceResult = tryDeviceAction(text);
+    const deviceResult = await tryDeviceAction(text);
     if (deviceResult) {
       addMessage('assistant', deviceResult);
       return;

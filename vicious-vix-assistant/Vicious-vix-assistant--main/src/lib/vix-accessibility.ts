@@ -14,6 +14,7 @@ export interface VixAccessibilityPluginInterface {
   openSettings(): Promise<void>;
   getLog(): Promise<{ entries: VixDiagnosticEntry[] }>;
   clearLog(): Promise<void>;
+  openApp(options: { packageNames: string[] }): Promise<{ opened: boolean; packageName?: string }>;
 }
 
 // On native Android this resolves to the real VixAccessibilityPlugin.kt.
