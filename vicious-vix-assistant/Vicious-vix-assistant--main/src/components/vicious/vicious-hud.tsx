@@ -186,14 +186,37 @@ export function ViciousHUD() {
     setDiagnosticLoading(false);
   };
 
+  const refreshOverlayStatus = () => {
+    VixAccessibility.isOverlayEnabled()
+      .then(({ enabled }) => setOverlayPermissionGranted(enabled))
+      .catch(() => setOverlayPermissionGranted(null));
+  };
+
   // Refresh watcher status/log whenever the Settings tab is opened
   useEffect(() => {
     if (activeTab === 'system') {
       refreshWatcherStatus();
-      VixAccessibility.isOverlayEnabled()
-        .then(({ enabled }) => setOverlayPermissionGranted(enabled))
-        .catch(() => setOverlayPermissionGranted(null));
+      refreshOverlayStatus();
     }
+  }, [activeTab]);
+
+  // Also refresh whenever the app comes back into focus (e.g. returning from
+  // Android's Accessibility/overlay settings screens) — without this, toggling
+  // a permission and coming straight back to an already-open Settings tab
+  // would leave the status stuck showing the old, stale value.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && activeTab === 'system') {
+        refreshWatcherStatus();
+        refreshOverlayStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
   }, [activeTab]);
 
   const toggleBubble = async () => {
@@ -380,19 +403,15 @@ export function ViciousHUD() {
     }
   };
 
-  const startListening = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      toast({ title: 'Speech recognition not supported in this browser.', variant: 'destructive' });
-      return;
+  const startListening = async () => {
+    setIsListening(true);
+    try {
+      const { transcript } = await VixAccessibility.listen();
+      handleCommand(transcript, 'voice');
+    } catch (e: any) {
+      toast({ title: e?.message || 'Could not hear that — try again', variant: 'destructive' });
     }
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onresult = (event: any) => handleCommand(event.results[0][0].transcript, 'voice');
-    recognition.start();
+    setIsListening(false);
   };
 
   const captureImage = async () => {

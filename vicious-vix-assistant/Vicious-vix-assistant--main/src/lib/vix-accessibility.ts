@@ -19,6 +19,7 @@ export interface VixAccessibilityPluginInterface {
   requestOverlayPermission(): Promise<void>;
   startOverlay(): Promise<void>;
   stopOverlay(): Promise<void>;
+  listen(): Promise<{ transcript: string }>;
 }
 
 // On native Android this resolves to the real VixAccessibilityPlugin.kt.

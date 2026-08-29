@@ -147,6 +147,79 @@ class VixAccessibilityPlugin : Plugin() {
         call.resolve()
     }
 
+    // --- Native offline-capable speech-to-text for the main chat mic -------
+    // Replaces the old webkitSpeechRecognition call, which doesn't exist in
+    // a Capacitor WebView at all (it's a Chrome-only browser API).
+
+    @PluginMethod
+    fun listen(call: PluginCall) {
+        val micGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!micGranted) {
+            requestPermissionForAlias("microphone", call, "micPermsCallbackForListen")
+            return
+        }
+        runListen(call)
+    }
+
+    @PermissionCallback
+    private fun micPermsCallbackForListen(call: PluginCall) {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            runListen(call)
+        } else {
+            call.reject("Microphone permission denied")
+        }
+    }
+
+    private fun runListen(call: PluginCall) {
+        // SpeechRecognizer must be created/used on a thread with a Looper (main thread)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (!android.speech.SpeechRecognizer.isRecognitionAvailable(context)) {
+                call.reject("Speech recognition not available on this device")
+                return@post
+            }
+            val recognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+            val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(android.speech.RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            }
+            recognizer.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onResults(results: android.os.Bundle?) {
+                    val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    val transcript = matches?.firstOrNull()
+                    if (transcript != null) {
+                        val ret = JSObject()
+                        ret.put("transcript", transcript)
+                        call.resolve(ret)
+                    } else {
+                        call.reject("No speech recognized")
+                    }
+                    recognizer.destroy()
+                }
+                override fun onError(error: Int) {
+                    call.reject("Speech recognition error code $error")
+                    recognizer.destroy()
+                }
+                override fun onReadyForSpeech(params: android.os.Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+            runCatching { recognizer.startListening(intent) }
+        }
+    }
+
     private fun isAccessibilityServiceEnabled(): Boolean {
         val expected = ComponentName(context, VixAccessibilityService::class.java)
         val enabledServices = Settings.Secure.getString(
