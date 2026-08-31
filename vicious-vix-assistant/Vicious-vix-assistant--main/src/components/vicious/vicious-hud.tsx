@@ -75,6 +75,8 @@ export function ViciousHUD() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [reminders, setReminders] = useState<{ id: string; text: string; time?: string; date?: string }[]>([]);
   const [apiKey, setApiKey] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [githubRepo, setGithubRepo] = useState('');
   const [textSize, setTextSize] = useState<TextSize>('medium');
   const [vocalResponses, setVocalResponses] = useState(false);
   const [activationLog, setActivationLog] = useState<ActivationLogEntry[]>([]);
@@ -96,6 +98,12 @@ export function ViciousHUD() {
 
     const savedKey = localStorage.getItem('vicious_api_key');
     if (savedKey) setApiKey(savedKey);
+
+    const savedGithubToken = localStorage.getItem('vicious_github_token');
+    if (savedGithubToken) setGithubToken(savedGithubToken);
+
+    const savedGithubRepo = localStorage.getItem('vicious_github_repo');
+    if (savedGithubRepo) setGithubRepo(savedGithubRepo);
 
     const savedMessages = localStorage.getItem('vicious_history');
     if (savedMessages) {
@@ -258,12 +266,103 @@ export function ViciousHUD() {
     window.open(url, '_system');
   };
 
+  // Known app-name -> package-name candidates, so "open <app>" launches the
+  // real app instead of falling through to a Google search of its name.
+  const KNOWN_APPS: Record<string, string[]> = {
+    chrome: ['com.android.chrome'],
+    youtube: ['com.google.android.youtube'],
+    gmail: ['com.google.android.gm'],
+    maps: ['com.google.android.apps.maps'],
+    'google maps': ['com.google.android.apps.maps'],
+    whatsapp: ['com.whatsapp'],
+    instagram: ['com.instagram.android'],
+    facebook: ['com.facebook.katana'],
+    messenger: ['com.facebook.orca'],
+    spotify: ['com.spotify.music'],
+    twitter: ['com.twitter.android'],
+    x: ['com.twitter.android'],
+    tiktok: ['com.zhiliaoapp.musically'],
+    netflix: ['com.netflix.mediaclient'],
+    'play store': ['com.android.vending'],
+    settings: ['com.android.settings'],
+    calculator: ['com.android.calculator2', 'com.google.android.calculator'],
+    contacts: ['com.android.contacts', 'com.google.android.contacts'],
+    calendar: ['com.google.android.calendar', 'com.android.calendar'],
+    gallery: ['com.sec.android.gallery3d', 'com.google.android.apps.photos'],
+    photos: ['com.google.android.apps.photos'],
+  };
+
+  const formatTranscriptAsMarkdown = () => {
+    const lines = messages.map(
+      m => `**${m.role}** (${new Date(m.timestamp).toLocaleString()}):\n${m.content}`
+    );
+    return `# Vicious Assistant conversation \u2014 ${new Date().toLocaleString()}\n\n${lines.join('\n\n---\n\n')}`;
+  };
+
+  /** Creates or updates a file in the user's own GitHub repo via a real API call, using their PAT. */
+  const pushToGithub = async (content: string, customPath?: string): Promise<string> => {
+    if (!githubToken || !githubRepo) {
+      return 'GitHub push needs a Personal Access Token and a repo (owner/repo) set in Settings first.';
+    }
+    const [owner, repo] = githubRepo.split('/').map(s => s.trim());
+    if (!owner || !repo) {
+      return 'GitHub repo in Settings should be in "owner/repo" format.';
+    }
+
+    const path = customPath || `vicious-notes/${new Date().toISOString().replace(/[:.]/g, '-')}.md`;
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github+json',
+    };
+
+    try {
+      // Check if the file already exists so we can update it instead of failing
+      let sha: string | undefined;
+      const existing = await fetch(apiUrl, { headers });
+      if (existing.ok) {
+        const data = await existing.json();
+        sha = data.sha;
+      }
+
+      const encoded = btoa(unescape(encodeURIComponent(content)));
+      const putRes = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Vicious push \u2014 ${new Date().toLocaleString()}`,
+          content: encoded,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+
+      if (!putRes.ok) {
+        const errBody = await putRes.text();
+        return `GitHub push failed (${putRes.status}): ${errBody.slice(0, 200)}`;
+      }
+      return `Pushed to github.com/${owner}/${repo}/blob/main/${path}`;
+    } catch (e: any) {
+      return `GitHub push failed: ${e?.message || 'network error'}`;
+    }
+  };
+
   /** Returns a short confirmation message if it handled the command, or null if not. */
   const GITHUB_USERNAME = 'renaealisha54-debug';
   const DEFAULT_GITHUB_REPO = 'VICIOUSASSISTANT';
 
   const tryDeviceAction = async (text: string): Promise<string | null> => {
     const lower = text.toLowerCase().trim();
+
+    // "push to github: <content>" — pushes exactly that content as a new file
+    const pushWithContent = text.match(/^(?:push|commit|save)(?: this)? to (?:github|the repo|my repo)\s*:\s*(.+)/is);
+    if (pushWithContent) {
+      return await pushToGithub(pushWithContent[1].trim());
+    }
+
+    // "push to github" / "commit to github" / "save this conversation to github" — pushes the chat transcript
+    if (/^(?:push|commit|save)(?: this)?(?: conversation)? to (?:github|the repo|my repo)$/i.test(lower)) {
+      return await pushToGithub(formatTranscriptAsMarkdown());
+    }
 
     // "open camera" / "launch camera" / "take a photo" — use the app's own
     // camera capture screen (same one the Camera nav icon opens), not a search
@@ -326,9 +425,22 @@ export function ViciousHUD() {
     }
 
     // "open <url or site>" / "go to <url or site>"
-    const openMatch = text.match(/^(?:open|go to)\s+(.+)/i);
+    const openMatch = text.match(/^(?:open|go to|launch|start)\s+(.+)/i);
     if (openMatch) {
       const target = openMatch[1].trim();
+      const targetLower = target.toLowerCase().replace(/\s+(app|application)$/i, '').trim();
+
+      // Known installed app? Launch it directly rather than searching for it.
+      if (KNOWN_APPS[targetLower]) {
+        try {
+          const result = await VixAccessibility.openApp({ packageNames: KNOWN_APPS[targetLower] });
+          if (result.opened) return `Opening ${target}...`;
+          return `${target} doesn't seem to be installed on this device.`;
+        } catch {
+          // native plugin unavailable (e.g. web preview) — fall through to search below
+        }
+      }
+
       const looksLikeUrl = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(target);
       if (looksLikeUrl) {
         const url = target.startsWith('http') ? target : `https://${target}`;
@@ -526,6 +638,36 @@ export function ViciousHUD() {
                   onChange={e => {
                     setUserName(e.target.value);
                     localStorage.setItem('vicious_user_name', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">GitHub Personal Access Token</label>
+                <Input
+                  type="password"
+                  placeholder="ghp_..."
+                  value={githubToken}
+                  onChange={e => {
+                    setGithubToken(e.target.value);
+                    localStorage.setItem('vicious_github_token', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Needs "repo" scope. Create one at github.com \u2192 Settings \u2192 Developer settings.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">GitHub Repo (owner/repo)</label>
+                <Input
+                  placeholder="yourname/your-repo"
+                  value={githubRepo}
+                  onChange={e => {
+                    setGithubRepo(e.target.value);
+                    localStorage.setItem('vicious_github_repo', e.target.value);
                   }}
                   className="bg-card/80 border-white/10"
                 />
