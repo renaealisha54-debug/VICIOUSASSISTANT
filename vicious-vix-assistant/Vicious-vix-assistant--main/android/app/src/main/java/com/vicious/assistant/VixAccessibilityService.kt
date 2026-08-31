@@ -109,8 +109,9 @@ class VixAccessibilityService : AccessibilityService() {
                     null,
                     "No GROQ_API_KEY configured (set it in android/local.properties). " +
                         "Local pattern only: $pkg showed no UI change for ${idleMs}ms — " +
-                        "check for a promise/callback with no timeout, a blocked main thread, " +
-                        "or a loading state that never gets cleared."
+                        "either a bug (promise/callback with no timeout, blocked main thread, " +
+                        "a loading state that never clears) or the app simply doesn't yet " +
+                        "handle this kind of input/command."
                 )
             }
             return
@@ -119,11 +120,12 @@ class VixAccessibilityService : AccessibilityService() {
         val prompt = """
             You are Vix, an on-device watchdog for an app under development (package: $pkg).
             Its UI has shown no change for ${idleMs}ms, which usually means the app's own
-            response logic is stuck, looping, or never returned a result.
+            response logic is stuck, looping, never returned a result, or simply doesn't
+            understand/handle whatever the user just asked it to do.
             Respond with ONLY a JSON object, no other text, no markdown fences:
             {
               "userReply": "a short, generic, safe message to type into the current field so the user isn't left staring at nothing",
-              "diagnosis": "1-2 sentences for the DEVELOPER of this app: the likely code-level cause (e.g. unresolved promise, missing timeout/fallback branch, infinite loop, blocked main thread, unhandled network error) and a concrete fix to try"
+              "diagnosis": "1-3 sentences for the DEVELOPER of this app, covering whichever applies: (a) if it looks like a bug — the likely code-level cause (e.g. unresolved promise, missing timeout/fallback branch, infinite loop, blocked main thread, unhandled network error) and a concrete fix to try; (b) if it looks like the app just never learned to handle this kind of input — what command/intent it likely failed to recognize, and what handling it should add to understand it next time. Cover both if both plausibly apply."
             }
         """.trimIndent()
 
@@ -152,8 +154,9 @@ class VixAccessibilityService : AccessibilityService() {
                         null,
                         "Network unreachable — could not reach Groq for a diagnosis. " +
                             "Local pattern only: $pkg showed no UI change for ${idleMs}ms — " +
-                            "check for a hung network call, an unresolved async task with no " +
-                            "timeout, or a loading state that never gets cleared."
+                            "either a bug (hung network call, unresolved async task with no " +
+                            "timeout, a loading state that never clears) or the app simply " +
+                            "doesn't yet handle this kind of input/command."
                     )
                 }
             }
