@@ -290,6 +290,7 @@ export function ViciousHUD() {
     calendar: ['com.google.android.calendar', 'com.android.calendar'],
     gallery: ['com.sec.android.gallery3d', 'com.google.android.apps.photos'],
     photos: ['com.google.android.apps.photos'],
+    termux: ['com.termux'],
   };
 
   const formatTranscriptAsMarkdown = () => {
@@ -615,7 +616,7 @@ export function ViciousHUD() {
         {/* Main */}
         <main className="flex-1 flex flex-col relative">
           {activeTab === 'system' ? (
-            <div className="flex-1 p-6 space-y-4">
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
               <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Settings</h2>
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Groq API Key</label>
