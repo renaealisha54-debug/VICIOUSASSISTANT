@@ -11,6 +11,8 @@
 
 ## What this app is
 
+**Note**: There is a separate, unrelated tool called Vicious-cli (a Termux command-line helper, lives in ~/vicious-cli, own GitHub repo). It is NOT part of this app and NOT this project — do not merge, reference, or confuse the two.
+
 **Core purpose, in the user's words**: "an AI safety net that kicks in when beta apps don't have a response, then logs when it's triggered to make it easier to teach AI apps commands." The diagnosis log covers both angles — a bug diagnosis when it looks like a code bug, and a command-gap explanation (what input/command the app failed to recognize) when it looks like a missing feature — whichever applies.
 "Vicious Assistant" — an Android app built with Next.js (static export) +
 Capacitor, developed entirely from a phone via Termux. Two parts:
