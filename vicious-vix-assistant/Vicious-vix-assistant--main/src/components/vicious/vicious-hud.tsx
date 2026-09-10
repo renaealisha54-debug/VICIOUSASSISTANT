@@ -1,5 +1,26 @@
 "use client";
 
+const callGroqFallback = async (userPrompt: string): Promise<string> => {
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.NEXT_PUBLIC_GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: userPrompt }]
+      })
+    });
+    const data = await response.json();
+    return data.choices[0]?.message?.content || "Fallback response empty.";
+  } catch (err) {
+    console.error("Groq fallback failed:", err);
+    return "Fallback execution error.";
+  }
+};
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
