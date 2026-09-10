@@ -1,5 +1,18 @@
 "use client";
 
+const executeAIWithFallback = async (mainApiCall: () => Promise<string>, prompt: string): Promise<string> => {
+  try {
+    const response = await mainApiCall();
+    if (!response || response.trim().length === 0 || /as an ai language model|default response/i.test(response)) {
+      throw new Error("Loop or empty response detected");
+    }
+    return response;
+  } catch (error) {
+    console.warn("Main AI failed or looped. Triggering Groq fallback...", error);
+    return await callGroqFallback(prompt);
+  }
+};
+
 const callGroqFallback = async (userPrompt: string): Promise<string> => {
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
