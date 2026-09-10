@@ -389,7 +389,7 @@ export function ViciousHUD() {
     const lower = text.toLowerCase().trim();
 
     // "push to github: <content>" — pushes exactly that content as a new file
-    const pushWithContent = text.match(/^(?:push|commit|save)(?: this)? to (?:github|the repo|my repo)\s*:\s*(.+)/is);
+    const pushWithContent = text.match(/^(?:push|commit|save)(?: this)? to (?:github|the repo|my repo)\s*:\s*(.+)/i);
     if (pushWithContent) {
       return await pushToGithub(pushWithContent[1].trim());
     }
