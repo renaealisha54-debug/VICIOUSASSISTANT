@@ -1,5 +1,5 @@
-import { processUploadedFile, ProcessedFile } from "@/lib/file-processor";
 "use client";
+import { processUploadedFile, ProcessedFile } from "@/lib/file-processor";
 
 const executeAIWithFallback = async (mainApiCall: () => Promise<string>, prompt: string): Promise<string> => {
   try {
@@ -36,7 +36,7 @@ const callGroqFallback = async (userPrompt: string): Promise<string> => {
 };
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User } from 'lucide-react';
+import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -102,6 +102,20 @@ type Message = {
 // Main component
 // ---------------------------------------------------------------------------
 export function ViciousHUD() {
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [attachedFiles, setAttachedFiles] = React.useState<ProcessedFile[]>([]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const processed = await processUploadedFile(files[i]);
+      setAttachedFiles((prev) => [...prev, processed]);
+    }
+  };
+  
   const [isListening, setIsListening] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
