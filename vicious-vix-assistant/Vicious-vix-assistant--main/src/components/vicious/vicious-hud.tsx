@@ -1,3 +1,4 @@
+import { processUploadedFile, ProcessedFile } from "@/lib/file-processor";
 "use client";
 
 const executeAIWithFallback = async (mainApiCall: () => Promise<string>, prompt: string): Promise<string> => {
