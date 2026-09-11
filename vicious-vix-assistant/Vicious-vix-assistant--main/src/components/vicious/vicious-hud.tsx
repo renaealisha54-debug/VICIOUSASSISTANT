@@ -73,18 +73,79 @@ type ActivationLogEntry = {
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 
-async function askGroq(prompt: string, apiKey: string): Promise<string> {
+async function callOpenAI(prompt: string, key: string): Promise<string> {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
+  });
+  if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? 'No response.';
+}
+
+async function callAnthropic(prompt: string, key: string): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
+  });
+  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.content?.[0]?.text ?? 'No response.';
+}
+
+async function callGoogle(prompt: string, key: string): Promise<string> {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  });
+  if (!res.ok) throw new Error(`Google ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response.';
+}
+
+async function callGroqRaw(prompt: string, key: string): Promise<string> {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
-      messages: [{ role: 'user', content: prompt }],
-    }),
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? 'No response.';
+}
+
+let vixProviderRotation = 0;
+
+async function askGroq(prompt: string, apiKey: string): Promise<string> {
+  const openaiKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_openai_key') || '') : '';
+  const anthropicKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_anthropic_key') || '') : '';
+  const googleKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_google_key') || '') : '';
+
+  const providers: { name: string; key: string; call: (p: string, k: string) => Promise<string> }[] = [
+    { name: 'Groq', key: apiKey, call: callGroqRaw },
+    { name: 'OpenAI', key: openaiKey, call: callOpenAI },
+    { name: 'Anthropic', key: anthropicKey, call: callAnthropic },
+    { name: 'Google', key: googleKey, call: callGoogle },
+  ].filter(p => p.key);
+
+  if (providers.length === 0) {
+    throw new Error('No API key set. Go to Settings and enter at least one provider key.');
+  }
+
+  let lastError: any = null;
+  for (let attempt = 0; attempt < providers.length; attempt++) {
+    const provider = providers[vixProviderRotation % providers.length];
+    vixProviderRotation++;
+    try {
+      return await provider.call(prompt, provider.key);
+    } catch (e: any) {
+      lastError = e;
+    }
+  }
+  throw lastError ?? new Error('All configured providers failed.');
 }
 
 // ---------------------------------------------------------------------------
@@ -117,8 +178,8 @@ export function ViciousHUD() {
   const [attachedFiles, setAttachedFiles] = React.useState<ProcessedFile[]>([]);
 
   const analyzeZipContents = async (processed: ProcessedFile) => {
-    if (!apiKey) {
-      addMessage('system', 'API key not set. Go to Settings and enter your Groq key.');
+    if (!apiKey && !openaiKey && !anthropicKey && !googleKey) {
+      addMessage('system', 'No API key set. Go to Settings and enter at least one provider key.');
       return;
     }
     const files = processed.extractedFiles ?? [];
@@ -138,6 +199,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         apiKey
       );
       addMessage('assistant', response);
+      updateSessionSummary(processed.name, response);
     } catch (e: any) {
       addMessage('system', `Error analyzing zip: ${e.message}`);
     }
@@ -164,6 +226,10 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [reminders, setReminders] = useState<{ id: string; text: string; time?: string; date?: string }[]>([]);
   const [apiKey, setApiKey] = useState('');
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [anthropicKey, setAnthropicKey] = useState('');
+  const [googleKey, setGoogleKey] = useState('');
+  const [sessionSummary, setSessionSummary] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [textSize, setTextSize] = useState<TextSize>('medium');
@@ -187,6 +253,18 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
     const savedKey = localStorage.getItem('vicious_api_key');
     if (savedKey) setApiKey(savedKey);
+
+    const savedOpenaiKey = localStorage.getItem('vicious_openai_key');
+    if (savedOpenaiKey) setOpenaiKey(savedOpenaiKey);
+
+    const savedAnthropicKey = localStorage.getItem('vicious_anthropic_key');
+    if (savedAnthropicKey) setAnthropicKey(savedAnthropicKey);
+
+    const savedGoogleKey = localStorage.getItem('vicious_google_key');
+    if (savedGoogleKey) setGoogleKey(savedGoogleKey);
+
+    const savedSummary = localStorage.getItem('vicious_session_summary');
+    if (savedSummary) setSessionSummary(savedSummary);
 
     const savedGithubToken = localStorage.getItem('vicious_github_token');
     if (savedGithubToken) setGithubToken(savedGithubToken);
@@ -552,6 +630,15 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     return null;
   };
 
+  const updateSessionSummary = (userText: string, assistantText: string) => {
+    setSessionSummary(prev => {
+      const entry = `\n[${new Date().toLocaleString()}]\nYou: ${userText}\nVicious: ${assistantText.slice(0, 300)}`;
+      const combined = (prev + entry).slice(-4000);
+      localStorage.setItem('vicious_session_summary', combined);
+      return combined;
+    });
+  };
+
   const handleCommand = async (text: string, source: 'voice' | 'text' = 'text') => {
     if (!text.trim()) return;
     addMessage('user', text);
@@ -565,8 +652,8 @@ Give a concise analysis: what this project/archive appears to be, its structure,
       return;
     }
 
-    if (!apiKey) {
-      addMessage('system', 'API key not set. Go to Settings and enter your Groq key.');
+    if (!apiKey && !openaiKey && !anthropicKey && !googleKey) {
+      addMessage('system', 'No API key set. Go to Settings and enter at least one provider key.');
       return;
     }
 
@@ -584,6 +671,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         try {
           const parsed = JSON.parse(result.replace(/```json|```/g, '').trim());
           addMessage('assistant', parsed.confirmationMessage);
+          updateSessionSummary(text, parsed.confirmationMessage);
           setReminders(prev => [...prev, {
             id: Math.random().toString(36).substring(7),
             text: parsed.reminderText,
@@ -599,6 +687,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
           apiKey
         );
         addMessage('assistant', response);
+        updateSessionSummary(text, response);
       }
     } catch (e: any) {
       addMessage('system', `Error: ${e.message}`);
@@ -718,6 +807,56 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                     localStorage.setItem('vicious_api_key', e.target.value);
                   }}
                   className="bg-card/80 border-white/10"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">OpenAI API Key (optional)</label>
+                <Input
+                  type="password"
+                  placeholder="sk-..."
+                  value={openaiKey}
+                  onChange={e => {
+                    setOpenaiKey(e.target.value);
+                    localStorage.setItem('vicious_openai_key', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Anthropic API Key (optional)</label>
+                <Input
+                  type="password"
+                  placeholder="sk-ant-..."
+                  value={anthropicKey}
+                  onChange={e => {
+                    setAnthropicKey(e.target.value);
+                    localStorage.setItem('vicious_anthropic_key', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Google (Gemini) API Key (optional)</label>
+                <Input
+                  type="password"
+                  placeholder="AIza..."
+                  value={googleKey}
+                  onChange={e => {
+                    setGoogleKey(e.target.value);
+                    localStorage.setItem('vicious_google_key', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Any combination works — Vicious rotates round-robin between whichever keys are set, so no single provider gets hit past its limit.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Session Summary (resume point)</label>
+                <textarea
+                  readOnly
+                  value={sessionSummary || 'No activity yet this session.'}
+                  className="bg-card/80 border border-white/10 rounded-md w-full text-xs p-2 h-32 overflow-y-auto"
                 />
               </div>
               <div className="space-y-2">
