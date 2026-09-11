@@ -1007,6 +1007,14 @@ export function ViciousHUD() {
 
               {/* Input */}
               <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent">
+                <div className="max-w-4xl mx-auto mb-2 flex flex-wrap gap-2">
+                  {attachedFiles.map((f, idx) => (
+                    <div key={idx} className="flex items-center gap-1 text-xs bg-card/80 border border-white/10 rounded-full px-3 py-1">
+                      <Paperclip className="w-3 h-3" />
+                      <span>{f.name}{f.type === 'zip' && f.extractedFiles ? ` (${f.extractedFiles.length} files)` : ''}</span>
+                    </div>
+                  ))}
+                </div>
                 <div className="max-w-4xl mx-auto flex items-center gap-4">
                   <div className="relative flex-1">
                     <Input
@@ -1020,6 +1028,22 @@ export function ViciousHUD() {
                       <Search className="w-5 h-5" />
                     </Button>
                   </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".zip"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-14 w-14 rounded-full bg-card/80 border border-white/10"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </Button>
                   <Button
                     onClick={startListening}
                     className={cn('h-14 w-14 rounded-full', isListening ? 'bg-destructive hover:bg-destructive/90' : 'bg-primary hover:bg-primary/90')}
