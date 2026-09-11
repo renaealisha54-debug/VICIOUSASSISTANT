@@ -24,12 +24,21 @@ export async function processUploadedFile(file: File): Promise<ProcessedFile> {
     const contents = await zip.loadAsync(file);
     const extractedFiles: { name: string; content: string }[] = [];
 
+    const skipPattern = /(^|\/)(node_modules|\.git|dist|build|\.gradle|\.next|out)(\/|$)/;
+    const MAX_FILES = 200;
+    const MAX_CONTENT_CHARS = 3000;
+
     for (const relativePath of Object.keys(contents.files)) {
+      if (extractedFiles.length >= MAX_FILES) break;
+      if (skipPattern.test(relativePath)) continue;
       const zipEntry = contents.files[relativePath];
       if (!zipEntry.dir) {
-        // Read text/code files inside the zip
-        const textContent = await zipEntry.async("string");
-        extractedFiles.push({ name: relativePath, content: textContent });
+        try {
+          const textContent = await zipEntry.async("string");
+          extractedFiles.push({ name: relativePath, content: textContent.slice(0, MAX_CONTENT_CHARS) });
+        } catch {
+          extractedFiles.push({ name: relativePath, content: "[binary or unreadable]" });
+        }
       }
     }
 

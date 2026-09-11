@@ -106,6 +106,33 @@ export function ViciousHUD() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = React.useState<ProcessedFile[]>([]);
 
+  const analyzeZipContents = async (processed: ProcessedFile) => {
+    if (!apiKey) {
+      addMessage('system', 'API key not set. Go to Settings and enter your Groq key.');
+      return;
+    }
+    const files = processed.extractedFiles ?? [];
+    const fileList = files.map(f => f.name).join('\n');
+    const sampleContents = files.slice(0, 10).map(f => `--- ${f.name} ---\n${f.content}`).join('\n\n');
+    addMessage('user', `Analyzing ${processed.name} (${files.length} files)...`);
+    try {
+      const response = await askGroq(
+        `You are Vicious Assistant. A zip file named "${processed.name}" was uploaded and extracted, containing ${files.length} files.
+File list:
+${fileList}
+
+Sample file contents:
+${sampleContents}
+
+Give a concise analysis: what this project/archive appears to be, its structure, and anything notable.`,
+        apiKey
+      );
+      addMessage('assistant', response);
+    } catch (e: any) {
+      addMessage('system', `Error analyzing zip: ${e.message}`);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -113,6 +140,9 @@ export function ViciousHUD() {
     for (let i = 0; i < files.length; i++) {
       const processed = await processUploadedFile(files[i]);
       setAttachedFiles((prev) => [...prev, processed]);
+      if (processed.type === 'zip') {
+        await analyzeZipContents(processed);
+      }
     }
   };
   
