@@ -1,5 +1,6 @@
 "use client";
 import { processUploadedFile, ProcessedFile } from "@/lib/file-processor";
+import { saveConversation, getSavedConversations, deleteConversation, Conversation } from "@/lib/chat-storage";
 
 const executeAIWithFallback = async (mainApiCall: () => Promise<string>, prompt: string): Promise<string> => {
   try {
@@ -222,7 +223,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [userName, setUserName] = useState('Operator');
-  const [activeTab, setActiveTab] = useState<'chat' | 'reminders' | 'camera' | 'system'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'reminders' | 'camera' | 'system' | 'history'>('chat');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [reminders, setReminders] = useState<{ id: string; text: string; time?: string; date?: string }[]>([]);
   const [apiKey, setApiKey] = useState('');
@@ -230,6 +231,13 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [anthropicKey, setAnthropicKey] = useState('');
   const [googleKey, setGoogleKey] = useState('');
   const [sessionSummary, setSessionSummary] = useState('');
+  const [pinCode, setPinCode] = useState('');
+  const [isCredentialsUnlocked, setIsCredentialsUnlocked] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinSetupInput, setPinSetupInput] = useState('');
+  const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(undefined);
+  const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
+  const [isThinking, setIsThinking] = useState(false);
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [textSize, setTextSize] = useState<TextSize>('medium');
@@ -265,6 +273,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
     const savedSummary = localStorage.getItem('vicious_session_summary');
     if (savedSummary) setSessionSummary(savedSummary);
+
+    const savedPin = localStorage.getItem('vicious_settings_pin');
+    if (savedPin) setPinCode(savedPin);
 
     const savedGithubToken = localStorage.getItem('vicious_github_token');
     if (savedGithubToken) setGithubToken(savedGithubToken);
@@ -639,6 +650,26 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     });
   };
 
+  const saveCurrentSession = () => {
+    const toSave = messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content, timestamp: m.timestamp.getTime() }));
+    const id = saveConversation(toSave, currentConversationId, githubRepo || undefined);
+    setCurrentConversationId(id);
+    setHistoryRefreshTick(t => t + 1);
+  };
+
+  const loadSession = (conv: Conversation) => {
+    setMessages(conv.messages.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: new Date(m.timestamp), type: 'text' as const })));
+    setCurrentConversationId(conv.id);
+    setActiveTab('chat');
+  };
+
+  const deleteSession = (id: string) => {
+    deleteConversation(id);
+    setHistoryRefreshTick(t => t + 1);
+  };
+
   const handleCommand = async (text: string, source: 'voice' | 'text' = 'text') => {
     if (!text.trim()) return;
     addMessage('user', text);
@@ -658,6 +689,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     }
 
     const lowerText = text.toLowerCase();
+    setIsThinking(true);
 
     try {
       if (lowerText.includes('remind me')) {
@@ -691,6 +723,8 @@ Give a concise analysis: what this project/archive appears to be, its structure,
       }
     } catch (e: any) {
       addMessage('system', `Error: ${e.message}`);
+    } finally {
+      setIsThinking(false);
     }
   };
 
@@ -788,15 +822,92 @@ Give a concise analysis: what this project/archive appears to be, its structure,
           <NavItem icon={MessageSquare} active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
           <NavItem icon={Bell} active={activeTab === 'reminders'} onClick={() => setActiveTab('reminders')} count={reminders.length} />
           <NavItem icon={Camera} active={activeTab === 'camera'} onClick={openCamera} />
+          <NavItem icon={Save} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
           <NavItem icon={Settings} active={activeTab === 'system'} onClick={() => setActiveTab('system')} />
         </nav>
 
         {/* Main */}
         <main className="flex-1 flex flex-col relative">
-          {activeTab === 'system' ? (
+          {activeTab === 'history' ? (
+            <div key={historyRefreshTick} className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
+                <Button size="sm" onClick={saveCurrentSession}>Save Current Session</Button>
+              </div>
+              {getSavedConversations().length === 0 ? (
+                <p className="text-xs text-muted-foreground">No saved sessions yet.</p>
+              ) : (
+                getSavedConversations().map(conv => (
+                  <div key={conv.id} className="bg-card/80 border border-white/10 rounded-md p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold">{conv.repo || 'Untitled Session'}</span>
+                      <span className="text-[10px] text-muted-foreground">{new Date(conv.updatedAt).toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{conv.title}</p>
+                    <div className="flex gap-2 pt-1">
+                      <Button size="sm" variant="outline" onClick={() => loadSession(conv)}>Load</Button>
+                      <Button size="sm" variant="outline" onClick={() => deleteSession(conv.id)}>Delete</Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : activeTab === 'system' ? (
             <div className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
               <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Settings</h2>
-              <div className="space-y-2">
+              <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
+                <label className="text-xs text-muted-foreground">Credential Lock</label>
+                {!pinCode ? (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">Set a PIN to protect your API keys and GitHub token. They stay hidden until you enter it.</p>
+                    <Input
+                      type="password"
+                      placeholder="Create a PIN"
+                      value={pinSetupInput}
+                      onChange={e => setPinSetupInput(e.target.value)}
+                      className="bg-card/80 border-white/10"
+                    />
+                    <Button size="sm" onClick={() => {
+                      if (pinSetupInput.trim()) {
+                        localStorage.setItem('vicious_settings_pin', pinSetupInput.trim());
+                        setPinCode(pinSetupInput.trim());
+                        setIsCredentialsUnlocked(true);
+                        setPinSetupInput('');
+                      }
+                    }}>Set PIN</Button>
+                  </>
+                ) : isCredentialsUnlocked ? (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-muted-foreground">Credentials unlocked for this session.</p>
+                    <Button size="sm" variant="outline" onClick={() => setIsCredentialsUnlocked(false)}>Lock</Button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">Enter your PIN to view or edit API keys and tokens.</p>
+                    <Input
+                      type="password"
+                      placeholder="PIN"
+                      value={pinInput}
+                      onChange={e => setPinInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && pinInput === pinCode) {
+                          setIsCredentialsUnlocked(true);
+                          setPinInput('');
+                        }
+                      }}
+                      className="bg-card/80 border-white/10"
+                    />
+                    <Button size="sm" onClick={() => {
+                      if (pinInput === pinCode) {
+                        setIsCredentialsUnlocked(true);
+                        setPinInput('');
+                      }
+                    }}>Unlock</Button>
+                  </>
+                )}
+              </div>
+              {isCredentialsUnlocked ? (
+<div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Groq API Key</label>
                 <Input
                   type="password"
@@ -809,7 +920,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   className="bg-card/80 border-white/10"
                 />
               </div>
-              <div className="space-y-2">
+              ) : (
+                <LockedField label="Groq API Key" />
+              )}
+              {isCredentialsUnlocked ? (
+<div className="space-y-2">
                 <label className="text-xs text-muted-foreground">OpenAI API Key (optional)</label>
                 <Input
                   type="password"
@@ -822,7 +937,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   className="bg-card/80 border-white/10"
                 />
               </div>
-              <div className="space-y-2">
+              ) : (
+                <LockedField label="OpenAI API Key" />
+              )}
+              {isCredentialsUnlocked ? (
+<div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Anthropic API Key (optional)</label>
                 <Input
                   type="password"
@@ -835,7 +954,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   className="bg-card/80 border-white/10"
                 />
               </div>
-              <div className="space-y-2">
+              ) : (
+                <LockedField label="Anthropic API Key" />
+              )}
+              {isCredentialsUnlocked ? (
+<div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Google (Gemini) API Key (optional)</label>
                 <Input
                   type="password"
@@ -851,6 +974,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   Any combination works — Vicious rotates round-robin between whichever keys are set, so no single provider gets hit past its limit.
                 </p>
               </div>
+              ) : (
+                <LockedField label="Google (Gemini) API Key" />
+              )}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Session Summary (resume point)</label>
                 <textarea
@@ -872,7 +998,8 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 />
               </div>
 
-              <div className="space-y-2">
+              {isCredentialsUnlocked ? (
+<div className="space-y-2">
                 <label className="text-xs text-muted-foreground">GitHub Personal Access Token</label>
                 <Input
                   type="password"
@@ -888,6 +1015,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   Needs "repo" scope. Create one at github.com \u2192 Settings \u2192 Developer settings.
                 </p>
               </div>
+              ) : (
+                <LockedField label="GitHub Personal Access Token" />
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">GitHub Repo (owner/repo)</label>
@@ -969,6 +1099,20 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                         </div>
                       ))
                     )}
+                  {isThinking && (
+                    <div className="flex gap-4 flex-row">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-primary/20 text-primary border border-primary/30">
+                        <Terminal className="w-4 h-4" />
+                      </div>
+                      <Card className="p-4 border-white/5 max-w-[80%] bg-[#1c2226] text-foreground">
+                        <div className="flex gap-1.5 items-center h-4">
+                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]"></span>
+                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]"></span>
+                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce"></span>
+                        </div>
+                      </Card>
+                    </div>
+                  )}
                   </div>
                 </ScrollArea>
               </div>
@@ -1155,6 +1299,16 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                         'bg-primary/10 border-primary/20 text-white'
                       )}>
                         {msg.content}
+                      
+                        {msg.role === 'assistant' && (
+                          <button
+                            onClick={() => copyToClipboard(msg.content, msg.id)}
+                            className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                          >
+                            {copiedId === msg.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            {copiedId === msg.id ? 'Copied' : 'Copy'}
+                          </button>
+                        )}
                       </Card>
                     </div>
                   ))}
@@ -1234,6 +1388,17 @@ Give a concise analysis: what this project/archive appears to be, its structure,
             </>
           )}
         </main>
+      </div>
+    </div>
+  );
+}
+
+function LockedField({ label }: { label: string }) {
+  return (
+    <div className="space-y-2">
+      <label className="text-xs text-muted-foreground">{label}</label>
+      <div className="bg-card/40 border border-white/10 rounded-md px-3 py-2 text-xs text-muted-foreground italic">
+        Locked — enter your PIN above to view or edit
       </div>
     </div>
   );
