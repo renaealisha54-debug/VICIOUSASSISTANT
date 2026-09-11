@@ -36,7 +36,7 @@ const callGroqFallback = async (userPrompt: string): Promise<string> => {
 };
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip } from 'lucide-react';
+import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip, Copy, Check, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -102,6 +102,16 @@ type Message = {
 // Main component
 // ---------------------------------------------------------------------------
 export function ViciousHUD() {
+
+  const [selectedModel, setSelectedModel] = React.useState<string>("llama-3.3-70b-versatile");
+  const [copiedId, setCopiedId] = React.useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+  
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [attachedFiles, setAttachedFiles] = React.useState<ProcessedFile[]>([]);
