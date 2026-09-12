@@ -1,6 +1,6 @@
 "use client";
 import { processUploadedFile, ProcessedFile } from "@/lib/file-processor";
-import { saveConversation, getSavedConversations, deleteConversation, Conversation } from "@/lib/chat-storage";
+import { saveConversation, getSavedConversations, deleteConversation, importConversations, Conversation } from "@/lib/chat-storage";
 
 const executeAIWithFallback = async (mainApiCall: () => Promise<string>, prompt: string): Promise<string> => {
   try {
@@ -124,6 +124,10 @@ async function askGroq(prompt: string, apiKey: string): Promise<string> {
   const openaiKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_openai_key') || '') : '';
   const anthropicKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_anthropic_key') || '') : '';
   const googleKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_google_key') || '') : '';
+  const priorSummary = typeof window !== 'undefined' ? (localStorage.getItem('vicious_session_summary') || '') : '';
+  const contextualPrompt = priorSummary
+    ? `Recent session context (for continuity across providers/limits):\n${priorSummary}\n\n---\n\n${prompt}`
+    : prompt;
 
   const providers: { name: string; key: string; call: (p: string, k: string) => Promise<string> }[] = [
     { name: 'Groq', key: apiKey, call: callGroqRaw },
@@ -141,7 +145,7 @@ async function askGroq(prompt: string, apiKey: string): Promise<string> {
     const provider = providers[vixProviderRotation % providers.length];
     vixProviderRotation++;
     try {
-      return await provider.call(prompt, provider.key);
+      return await provider.call(contextualPrompt, provider.key);
     } catch (e: any) {
       lastError = e;
     }
@@ -243,6 +247,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [selectedSaveRepo, setSelectedSaveRepo] = useState('');
   const [saveDetailsInput, setSaveDetailsInput] = useState('');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [textSize, setTextSize] = useState<TextSize>('medium');
@@ -694,6 +699,31 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     localStorage.setItem('vicious_linked_repos', JSON.stringify(updated));
   };
 
+  const handleImportHistory = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      let jsonText: string;
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        const processed = await processUploadedFile(file);
+        const convFile = processed.extractedFiles?.find(f => f.name.toLowerCase().includes('conversations') && f.name.toLowerCase().endsWith('.json'));
+        if (!convFile) {
+          addMessage('system', 'No conversations.json found in that zip.');
+          return;
+        }
+        jsonText = convFile.content;
+      } else {
+        jsonText = await file.text();
+      }
+      const raw = JSON.parse(jsonText);
+      const count = importConversations(raw, 'Claude');
+      addMessage('system', `Imported ${count} conversation(s) into Session History.`);
+      setHistoryRefreshTick(t => t + 1);
+    } catch (err: any) {
+      addMessage('system', `Import failed: ${err.message}`);
+    }
+  };
+
   const handleCommand = async (text: string, source: 'voice' | 'text' = 'text') => {
     if (!text.trim()) return;
     addMessage('user', text);
@@ -854,7 +884,22 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         <main className="flex-1 flex flex-col relative">
           {activeTab === 'history' ? (
             <div key={historyRefreshTick} className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
-              <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".json,.zip"
+                  className="hidden"
+                  onChange={handleImportHistory}
+                />
+                <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()}>
+                  Import AI History
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground -mt-2">
+                Import a Claude export (Settings → Account → Export data) as .json or .zip.
+              </p>
 
               <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
                 <label className="text-xs text-muted-foreground">Linked Repos (build history only — nothing is executed)</label>
