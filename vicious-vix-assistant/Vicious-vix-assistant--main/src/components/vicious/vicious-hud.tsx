@@ -238,6 +238,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(undefined);
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
   const [isThinking, setIsThinking] = useState(false);
+  const [linkedRepos, setLinkedRepos] = useState<string[]>([]);
+  const [newRepoInput, setNewRepoInput] = useState('');
+  const [selectedSaveRepo, setSelectedSaveRepo] = useState('');
+  const [saveDetailsInput, setSaveDetailsInput] = useState('');
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [textSize, setTextSize] = useState<TextSize>('medium');
@@ -276,6 +281,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
     const savedPin = localStorage.getItem('vicious_settings_pin');
     if (savedPin) setPinCode(savedPin);
+
+    const savedRepos = localStorage.getItem('vicious_linked_repos');
+    if (savedRepos) setLinkedRepos(JSON.parse(savedRepos));
 
     const savedGithubToken = localStorage.getItem('vicious_github_token');
     if (savedGithubToken) setGithubToken(savedGithubToken);
@@ -654,8 +662,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     const toSave = messages
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({ id: m.id, role: m.role as 'user' | 'assistant', content: m.content, timestamp: m.timestamp.getTime() }));
-    const id = saveConversation(toSave, currentConversationId, githubRepo || undefined);
+    const id = saveConversation(toSave, currentConversationId, selectedSaveRepo || undefined, saveDetailsInput || undefined);
     setCurrentConversationId(id);
+    setSaveDetailsInput('');
     setHistoryRefreshTick(t => t + 1);
   };
 
@@ -668,6 +677,21 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const deleteSession = (id: string) => {
     deleteConversation(id);
     setHistoryRefreshTick(t => t + 1);
+  };
+
+  const addLinkedRepo = () => {
+    const name = newRepoInput.trim();
+    if (!name || linkedRepos.includes(name)) return;
+    const updated = [...linkedRepos, name];
+    setLinkedRepos(updated);
+    localStorage.setItem('vicious_linked_repos', JSON.stringify(updated));
+    setNewRepoInput('');
+  };
+
+  const removeLinkedRepo = (name: string) => {
+    const updated = linkedRepos.filter(r => r !== name);
+    setLinkedRepos(updated);
+    localStorage.setItem('vicious_linked_repos', JSON.stringify(updated));
   };
 
   const handleCommand = async (text: string, source: 'voice' | 'text' = 'text') => {
@@ -830,10 +854,54 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         <main className="flex-1 flex flex-col relative">
           {activeTab === 'history' ? (
             <div key={historyRefreshTick} className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
+              <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
+
+              <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
+                <label className="text-xs text-muted-foreground">Linked Repos (build history only — nothing is executed)</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="owner/repo"
+                    value={newRepoInput}
+                    onChange={e => setNewRepoInput(e.target.value)}
+                    className="bg-card/80 border-white/10"
+                  />
+                  <Button size="sm" onClick={addLinkedRepo}>Add</Button>
+                </div>
+                {linkedRepos.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {linkedRepos.map(r => (
+                      <div key={r} className="flex items-center gap-1 text-xs bg-card/80 border border-white/10 rounded-full px-3 py-1">
+                        <span>{r}</span>
+                        <button onClick={() => removeLinkedRepo(r)} className="text-muted-foreground hover:text-destructive">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
+                <label className="text-xs text-muted-foreground">Save Current Session</label>
+                <select
+                  value={selectedSaveRepo}
+                  onChange={e => setSelectedSaveRepo(e.target.value)}
+                  className="w-full bg-card/80 border border-white/10 rounded-md text-sm p-2"
+                >
+                  <option value="">No repo</option>
+                  {linkedRepos.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                <textarea
+                  placeholder="Details for this session (notes, environment, deploy steps, etc. — no passwords)"
+                  value={saveDetailsInput}
+                  onChange={e => setSaveDetailsInput(e.target.value)}
+                  className="bg-card/80 border border-white/10 rounded-md w-full text-xs p-2 h-20"
+                />
                 <Button size="sm" onClick={saveCurrentSession}>Save Current Session</Button>
               </div>
+
               {getSavedConversations().length === 0 ? (
                 <p className="text-xs text-muted-foreground">No saved sessions yet.</p>
               ) : (
@@ -846,8 +914,17 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                     <p className="text-xs text-muted-foreground truncate">{conv.title}</p>
                     <div className="flex gap-2 pt-1">
                       <Button size="sm" variant="outline" onClick={() => loadSession(conv)}>Load</Button>
+                      <Button size="sm" variant="outline" onClick={() => setExpandedSessionId(expandedSessionId === conv.id ? null : conv.id)}>
+                        {expandedSessionId === conv.id ? 'Hide Details' : 'Details'}
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => deleteSession(conv.id)}>Delete</Button>
                     </div>
+                    {expandedSessionId === conv.id && (
+                      <div className="mt-2 text-xs bg-card/60 border border-white/10 rounded-md p-2 space-y-1">
+                        <p><span className="text-muted-foreground">Repo:</span> {conv.repo || 'None'}</p>
+                        <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Details:</span> {conv.details || 'No details added.'}</p>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

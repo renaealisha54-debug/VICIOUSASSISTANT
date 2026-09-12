@@ -11,18 +11,19 @@ export interface Conversation {
   messages: Message[];
   updatedAt: number;
   repo?: string;
+  details?: string;
 }
 
 const STORAGE_KEY = "vicious_conversations";
 
-export const saveConversation = (messages: Message[], currentId?: string, repo?: string): string => {
+export const saveConversation = (messages: Message[], currentId?: string, repo?: string, details?: string): string => {
   if (messages.length === 0) return "";
   const existing = getSavedConversations();
   const id = currentId || "conv_" + Date.now();
   const title = messages[0]?.content.slice(0, 30) + "...";
 
   const updated = existing.filter(c => c.id !== id);
-  updated.unshift({ id, title, messages, updatedAt: Date.now(), repo });
+  updated.unshift({ id, title, messages, updatedAt: Date.now(), repo, details });
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   return id;
