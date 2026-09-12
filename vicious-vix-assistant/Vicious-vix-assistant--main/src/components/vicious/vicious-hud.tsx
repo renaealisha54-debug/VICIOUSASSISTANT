@@ -227,7 +227,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [userName, setUserName] = useState('Operator');
-  const [activeTab, setActiveTab] = useState<'chat' | 'reminders' | 'camera' | 'system' | 'history'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'reminders' | 'camera' | 'system' | 'history' | 'hub'>('chat');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [reminders, setReminders] = useState<{ id: string; text: string; time?: string; date?: string }[]>([]);
   const [apiKey, setApiKey] = useState('');
@@ -248,6 +248,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [saveDetailsInput, setSaveDetailsInput] = useState('');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const importInputRef = React.useRef<HTMLInputElement>(null);
+  const [hubNotes, setHubNotes] = useState<Record<string, string>>({});
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [textSize, setTextSize] = useState<TextSize>('medium');
@@ -289,6 +290,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
     const savedRepos = localStorage.getItem('vicious_linked_repos');
     if (savedRepos) setLinkedRepos(JSON.parse(savedRepos));
+
+    const savedHubNotes = localStorage.getItem('vicious_hub_notes');
+    if (savedHubNotes) setHubNotes(JSON.parse(savedHubNotes));
 
     const savedGithubToken = localStorage.getItem('vicious_github_token');
     if (savedGithubToken) setGithubToken(savedGithubToken);
@@ -724,6 +728,14 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     }
   };
 
+  const updateHubNote = (id: string, value: string) => {
+    setHubNotes(prev => {
+      const updated = { ...prev, [id]: value };
+      localStorage.setItem('vicious_hub_notes', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const handleCommand = async (text: string, source: 'voice' | 'text' = 'text') => {
     if (!text.trim()) return;
     addMessage('user', text);
@@ -876,13 +888,59 @@ Give a concise analysis: what this project/archive appears to be, its structure,
           <NavItem icon={MessageSquare} active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
           <NavItem icon={Bell} active={activeTab === 'reminders'} onClick={() => setActiveTab('reminders')} count={reminders.length} />
           <NavItem icon={Camera} active={activeTab === 'camera'} onClick={openCamera} />
+          <NavItem icon={Github} active={activeTab === 'hub'} onClick={() => setActiveTab('hub')} />
           <NavItem icon={Save} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
           <NavItem icon={Settings} active={activeTab === 'system'} onClick={() => setActiveTab('system')} />
         </nav>
 
         {/* Main */}
         <main className="flex-1 flex flex-col relative">
-          {activeTab === 'history' ? (
+          {activeTab === 'hub' ? (
+            <div className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
+              <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Hub</h2>
+              <p className="text-[11px] text-muted-foreground -mt-2">
+                Quick access to everything this app connects to — tap to open, jot notes per service.
+              </p>
+              {[
+                { id: 'claude', name: 'Claude', url: 'https://claude.ai', keyValue: '' },
+                { id: 'github', name: 'GitHub', url: 'https://github.com', keyValue: githubToken },
+                { id: 'termux', name: 'Termux Docs', url: 'https://termux.dev', keyValue: '' },
+                { id: 'groq', name: 'Groq Console', url: 'https://console.groq.com', keyValue: apiKey },
+                { id: 'openai', name: 'OpenAI Platform', url: 'https://platform.openai.com', keyValue: openaiKey },
+                { id: 'anthropic', name: 'Anthropic Console', url: 'https://console.anthropic.com', keyValue: anthropicKey },
+                { id: 'google', name: 'Google AI Studio', url: 'https://aistudio.google.com', keyValue: googleKey },
+              ].map(service => (
+                <div key={service.id} className="bg-card/80 border border-white/10 rounded-md p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <a
+                      href={service.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-primary hover:underline"
+                    >
+                      {service.name}
+                    </a>
+                    {service.keyValue !== '' && (
+                      <span className={cn(
+                        'text-[10px] px-2 py-0.5 rounded-full border',
+                        service.keyValue ? 'text-green-400 border-green-500/30 bg-green-500/10' : 'text-muted-foreground border-white/10 bg-white/5'
+                      )}>
+                        {service.keyValue
+                          ? (isCredentialsUnlocked ? `••••${service.keyValue.slice(-4)}` : 'Configured')
+                          : 'Not set'}
+                      </span>
+                    )}
+                  </div>
+                  <textarea
+                    placeholder="Notes for this service..."
+                    value={hubNotes[service.id] || ''}
+                    onChange={e => updateHubNote(service.id, e.target.value)}
+                    className="bg-card/60 border border-white/10 rounded-md w-full text-xs p-2 h-16"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : activeTab === 'history' ? (
             <div key={historyRefreshTick} className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
