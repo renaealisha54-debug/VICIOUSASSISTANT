@@ -902,24 +902,33 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 Quick access to everything this app connects to — tap to open, jot notes per service.
               </p>
               {[
-                { id: 'claude', name: 'Claude', url: 'https://claude.ai', keyValue: '' },
-                { id: 'github', name: 'GitHub', url: 'https://github.com', keyValue: githubToken },
-                { id: 'termux', name: 'Termux Docs', url: 'https://termux.dev', keyValue: '' },
-                { id: 'groq', name: 'Groq Console', url: 'https://console.groq.com', keyValue: apiKey },
-                { id: 'openai', name: 'OpenAI Platform', url: 'https://platform.openai.com', keyValue: openaiKey },
-                { id: 'anthropic', name: 'Anthropic Console', url: 'https://console.anthropic.com', keyValue: anthropicKey },
-                { id: 'google', name: 'Google AI Studio', url: 'https://aistudio.google.com', keyValue: googleKey },
+                { id: 'claude', name: 'Claude', url: 'https://claude.ai', pkg: null as string | null, keyValue: '' },
+                { id: 'github', name: 'GitHub', url: 'https://github.com', pkg: null as string | null, keyValue: githubToken },
+                { id: 'termux', name: 'Termux', url: null as string | null, pkg: 'com.termux' as string | null, keyValue: '' },
+                { id: 'groq', name: 'Groq Console', url: 'https://console.groq.com', pkg: null as string | null, keyValue: apiKey },
+                { id: 'openai', name: 'OpenAI Platform', url: 'https://platform.openai.com', pkg: null as string | null, keyValue: openaiKey },
+                { id: 'anthropic', name: 'Anthropic Console', url: 'https://console.anthropic.com', pkg: null as string | null, keyValue: anthropicKey },
+                { id: 'google', name: 'Google AI Studio', url: 'https://aistudio.google.com', pkg: null as string | null, keyValue: googleKey },
               ].map(service => (
                 <div key={service.id} className="bg-card/80 border border-white/10 rounded-md p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <a
-                      href={service.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-primary hover:underline"
-                    >
-                      {service.name}
-                    </a>
+                    {service.pkg ? (
+                      <button
+                        onClick={() => { VixAccessibility.openApp({ packageNames: [service.pkg as string] }).catch(() => {}); }}
+                        className="text-sm font-semibold text-primary hover:underline text-left"
+                      >
+                        {service.name}
+                      </button>
+                    ) : (
+                      <a
+                        href={service.url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-semibold text-primary hover:underline"
+                      >
+                        {service.name}
+                      </a>
+                    )}
                     {service.keyValue !== '' && (
                       <span className={cn(
                         'text-[10px] px-2 py-0.5 rounded-full border',
