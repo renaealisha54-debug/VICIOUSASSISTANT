@@ -1612,3 +1612,135 @@ function NavItem({ icon: Icon, active, onClick, count }: { icon: any; active: bo
     </div>
   );
 }
+
+// --- Markdown-ish rendering for assistant replies (bold, headers, lists, code blocks) ---
+
+function CodeBlock({ language, code }: { language?: string; code: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable — fail silently
+    }
+  };
+  return (
+    <div className="relative my-2 rounded-lg overflow-hidden border border-white/10 bg-black/60">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span>{language || 'code'}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 hover:text-white transition-colors"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="p-3 overflow-x-auto text-xs font-mono whitespace-pre-wrap break-words">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const token = match[0];
+    if (token.startsWith('**')) {
+      parts.push(<strong key={key++}>{token.slice(2, -2)}</strong>);
+    } else {
+      parts.push(
+        <code key={key++} className="px-1 py-0.5 rounded bg-white/10 text-xs font-mono">
+          {token.slice(1, -1)}
+        </code>
+      );
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+}
+
+function renderMarkdownBlock(text: string): React.ReactNode[] {
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let key = 0;
+  let listBuffer: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    if (listType === 'ol') {
+      nodes.push(
+        <ol key={key++} className="list-decimal list-inside space-y-1 my-1">
+          {listBuffer.map((item, i) => <li key={i}>{renderInlineMarkdown(item)}</li>)}
+        </ol>
+      );
+    } else {
+      nodes.push(
+        <ul key={key++} className="list-disc list-inside space-y-1 my-1">
+          {listBuffer.map((item, i) => <li key={i}>{renderInlineMarkdown(item)}</li>)}
+        </ul>
+      );
+    }
+    listBuffer = [];
+    listType = null;
+  };
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^(#{1,4})\s+(.*)/);
+    const olMatch = line.match(/^\s*\d+[.)]\s+(.*)/);
+    const ulMatch = line.match(/^\s*[-*]\s+(.*)/);
+
+    if (headerMatch) {
+      flushList();
+      const level = headerMatch[1].length;
+      nodes.push(
+        <div key={key++} className={cn(level <= 2 ? 'text-sm font-bold' : 'text-xs font-bold', 'mt-2 mb-1 text-primary')}>
+          {renderInlineMarkdown(headerMatch[2])}
+        </div>
+      );
+    } else if (olMatch) {
+      if (listType !== 'ol') flushList();
+      listType = 'ol';
+      listBuffer.push(olMatch[1]);
+    } else if (ulMatch) {
+      if (listType !== 'ul') flushList();
+      listType = 'ul';
+      listBuffer.push(ulMatch[1]);
+    } else if (line.trim() === '') {
+      flushList();
+      nodes.push(<div key={key++} className="h-1" />);
+    } else {
+      flushList();
+      nodes.push(<p key={key++} className="my-0.5">{renderInlineMarkdown(line)}</p>);
+    }
+  }
+  flushList();
+  return nodes;
+}
+
+function renderMessageContent(content: string): React.ReactNode {
+  const parts = content.split(/```(\w*)\n?([\s\S]*?)```/g);
+  const nodes: React.ReactNode[] = [];
+  let key = 0;
+  for (let i = 0; i < parts.length; i += 3) {
+    const textPart = parts[i];
+    if (textPart) nodes.push(<div key={key++}>{renderMarkdownBlock(textPart)}</div>);
+    const lang = parts[i + 1];
+    const code = parts[i + 2];
+    if (code !== undefined) {
+      nodes.push(<CodeBlock key={key++} language={lang} code={code.replace(/\n$/, '')} />);
+    }
+  }
+  return nodes;
+}
