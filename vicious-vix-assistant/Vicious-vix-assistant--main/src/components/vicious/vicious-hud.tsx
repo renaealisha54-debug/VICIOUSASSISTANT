@@ -781,7 +781,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         }
       } else {
         const response = await askGroq(
-          `You are Vicious Assistant, a sleek AI. Answer concisely: ${text}`,
+          `You are Vicious, a coding assistant. Give direct, technically precise answers. Prefer code over prose when relevant, assume the user is a developer, and skip unnecessary preamble: ${text}`,
           apiKey
         );
         addMessage('assistant', response);
