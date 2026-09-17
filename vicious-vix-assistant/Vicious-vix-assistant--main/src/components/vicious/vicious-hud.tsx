@@ -550,6 +550,12 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const tryDeviceAction = async (text: string): Promise<string | null> => {
     const lower = text.toLowerCase().trim();
 
+    // Long pasted text (build logs, terminal output, code, etc.) should never
+    // trigger a device-action shortcut just because it happens to contain a
+    // word like "github" or "repo" somewhere in it — always treat it as a
+    // real question for the AI instead.
+    if (text.length > 200) return null;
+
     // "push to github: <content>" — pushes exactly that content as a new file
     const pushWithContent = text.match(/^(?:push|commit|save)(?: this)? to (?:github|the repo|my repo)\s*:\s*(.+)/i);
     if (pushWithContent) {
