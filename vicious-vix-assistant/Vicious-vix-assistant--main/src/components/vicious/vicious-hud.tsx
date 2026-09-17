@@ -42,6 +42,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -189,7 +190,7 @@ export function ViciousHUD() {
     }
     const files = processed.extractedFiles ?? [];
     const fileList = files.map(f => f.name).join('\n');
-    const sampleContents = files.slice(0, 10).map(f => `--- ${f.name} ---\n${f.content}`).join('\n\n');
+    const sampleContents = files.slice(0, 10).map(f => `--- ${f.name} ---\n${f.content.slice(0, 800)}${f.content.length > 800 ? '\n... (truncated)' : ''}`).join('\n\n');
     addMessage('user', `Analyzing ${processed.name} (${files.length} files)...`);
     try {
       const response = await askGroq(
@@ -1487,7 +1488,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                         msg.role === 'system' ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300 text-xs font-mono' :
                         'bg-primary/10 border-primary/20 text-white'
                       )}>
-                        {msg.content}
+                        {msg.role === 'assistant' ? renderMessageContent(msg.content) : msg.content}
                       
                         {msg.role === 'assistant' && (
                           <button
@@ -1539,14 +1540,19 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 </div>
                 <div className="max-w-4xl mx-auto flex items-center gap-4">
                   <div className="relative flex-1">
-                    <Input
-                      placeholder="Execute command or query..."
-                      className="h-14 bg-card/80 border-white/10 pr-12 text-lg"
+                    <Textarea
+                      placeholder="Execute command or query... (Shift+Enter for a new line)"
+                      className="min-h-[70px] max-h-[160px] bg-card/80 border-white/10 pr-12 text-lg resize-y"
                       value={inputValue}
                       onChange={e => setInputValue(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleCommand(inputValue)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleCommand(inputValue);
+                        }
+                      }}
                     />
-                    <Button variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => handleCommand(inputValue)}>
+                    <Button variant="ghost" size="icon" className="absolute right-2 bottom-2" onClick={() => handleCommand(inputValue)}>
                       <Search className="w-5 h-5" />
                     </Button>
                   </div>
