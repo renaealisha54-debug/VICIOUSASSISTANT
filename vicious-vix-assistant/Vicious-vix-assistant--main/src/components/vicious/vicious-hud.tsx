@@ -1055,7 +1055,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                     {expandedSessionId === conv.id && (
                       <div className="mt-2 text-xs bg-card/60 border border-white/10 rounded-md p-2 space-y-1">
                         <p><span className="text-muted-foreground">Repo:</span> {conv.repo || 'None'}</p>
-                        <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Details:</span> {conv.details || 'No details added.'}</p>
+                        <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Details:</span> {conv.details || sessionSummary || 'No details added.'}</p>
                       </div>
                     )}
                   </div>
