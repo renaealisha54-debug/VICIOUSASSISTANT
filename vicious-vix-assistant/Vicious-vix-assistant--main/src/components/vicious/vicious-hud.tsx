@@ -37,7 +37,7 @@ const callGroqFallback = async (userPrompt: string): Promise<string> => {
 };
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip, Copy, Check, Save } from 'lucide-react';
+import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip, Copy, Check, Save, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -687,6 +687,8 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const loadSession = (conv: Conversation) => {
     setMessages(conv.messages.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: new Date(m.timestamp), type: 'text' as const })));
     setCurrentConversationId(conv.id);
+    setSelectedSaveRepo(conv.repo || '');
+    setSaveDetailsInput(conv.details || '');
     setActiveTab('chat');
   };
 
@@ -893,6 +895,18 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         {/* Sidebar */}
         <nav className="w-20 border-r flex flex-col items-center py-6 gap-6">
           <NavItem icon={MessageSquare} active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
+          <NavItem
+            icon={Plus}
+            active={false}
+            onClick={() => {
+              setMessages([]);
+              localStorage.setItem('vicious_history', JSON.stringify([]));
+              setActiveTab('chat');
+              // sessionSummary is deliberately left untouched here — it's the
+              // cross-session continuity memory fed into every AI call, and
+              // "New Session" should clear the visible chat, not that memory.
+            }}
+          />
           <NavItem icon={Bell} active={activeTab === 'reminders'} onClick={() => setActiveTab('reminders')} count={reminders.length} />
           <NavItem icon={Camera} active={activeTab === 'camera'} onClick={openCamera} />
           <NavItem icon={Github} active={activeTab === 'hub'} onClick={() => setActiveTab('hub')} />
@@ -1535,7 +1549,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
               )}
 
               {/* Input */}
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent">
+              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
                 <div className="max-w-4xl mx-auto mb-2 flex flex-wrap gap-2">
                   {attachedFiles.map((f, idx) => (
                     <div key={idx} className="flex items-center gap-1 text-xs bg-card/80 border border-white/10 rounded-full px-3 py-1">
@@ -1631,7 +1645,14 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
   const [copied, setCopied] = React.useState(false);
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(code);
+      // Strip a leading "$ " or "# " prompt marker from each line, if present,
+      // so what gets pasted is a real, directly-runnable command rather than
+      // something that fails on a stray prompt character.
+      const cleaned = code
+        .split('\n')
+        .map(line => line.replace(/^\s*[$#]\s?/, ''))
+        .join('\n');
+      await navigator.clipboard.writeText(cleaned);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
