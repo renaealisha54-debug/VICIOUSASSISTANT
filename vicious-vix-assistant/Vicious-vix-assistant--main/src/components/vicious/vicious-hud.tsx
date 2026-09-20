@@ -242,6 +242,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const [isThinking, setIsThinking] = useState(false);
   const [linkedRepos, setLinkedRepos] = useState<string[]>([]);
   const [newRepoInput, setNewRepoInput] = useState('');
+  const [githubOwnerEmail, setGithubOwnerEmail] = useState('');
   const [selectedSaveRepo, setSelectedSaveRepo] = useState('');
   const [saveDetailsInput, setSaveDetailsInput] = useState('');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
@@ -325,6 +326,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
     const savedVocal = localStorage.getItem('vicious_vocal_responses');
     if (savedVocal) setVocalResponses(savedVocal === 'true');
+
+    const savedOwnerEmail = localStorage.getItem('vicious_github_owner_email');
+    if (savedOwnerEmail) setGithubOwnerEmail(savedOwnerEmail);
 
     const savedLog = localStorage.getItem('vicious_activation_log');
     if (savedLog) setActivationLog(JSON.parse(savedLog));
@@ -955,6 +959,19 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
               
               
+
+              <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
+                <label className="text-xs text-muted-foreground">GitHub Owner / Email</label>
+                <Input
+                  placeholder="renaealisha54-debug"
+                  value={githubOwnerEmail}
+                  onChange={e => {
+                    setGithubOwnerEmail(e.target.value);
+                    localStorage.setItem('vicious_github_owner_email', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+              </div>
 
               <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
                 <label className="text-xs text-muted-foreground">Linked Repos (build history only — nothing is executed)</label>
