@@ -1321,7 +1321,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
           ) : (
             <>
               <ScrollArea className="flex-1 p-6" viewportRef={scrollRef}>
-                <div className="max-w-4xl mx-auto space-y-6 pb-24">
+                <div className="max-w-4xl mx-auto space-y-6" style={{ paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
                   {messages.map(msg => (
                     <div key={msg.id} className={cn('flex gap-4', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
                       <div className={cn(
