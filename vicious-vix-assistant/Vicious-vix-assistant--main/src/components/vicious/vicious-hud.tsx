@@ -888,20 +888,64 @@ Give a concise analysis: what this project/archive appears to be, its structure,
             <div key={historyRefreshTick} className="flex-1 p-6 space-y-4 overflow-y-auto min-h-0">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
-                <input
-                  ref={importInputRef}
-                  type="file"
-                  accept=".json,.zip"
-                  className="hidden"
-                  onChange={handleImportHistory}
-                />
-                <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()}>
-                  Import AI History
-                </Button>
+                
               </div>
-              <p className="text-[11px] text-muted-foreground -mt-2">
-                Import a Claude export (Settings → Account → Export data) as .json or .zip.
-              </p>
+              {/* Activation log */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Activation Log</label>
+                  {activationLog.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs text-muted-foreground hover:text-white"
+                      onClick={() => setActivationLog([])}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <ScrollArea className="h-56 rounded-lg border border-white/10 bg-card/80">
+                  <div className="p-3 space-y-2">
+                    {activationLog.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No activations yet.</p>
+                    ) : (
+                      activationLog.map(entry => (
+                        <div key={entry.id} className="flex items-start gap-2 text-xs border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                          <span className={cn(
+                            'shrink-0 rounded px-1.5 py-0.5 font-mono uppercase text-[10px]',
+                            entry.source === 'voice' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground'
+                          )}>
+                            {entry.source}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-foreground/90">{entry.text}</p>
+                            <p className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  {isThinking && (
+                    <div className="flex gap-4 flex-row">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-primary/20 text-primary border border-primary/30">
+                        <Terminal className="w-4 h-4" />
+                      </div>
+                      <Card className="p-4 border-white/5 max-w-[80%] bg-[#1c2226] text-foreground">
+                        <div className="flex gap-1.5 items-center h-4">
+                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]"></span>
+                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]"></span>
+                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce"></span>
+                        </div>
+                      </Card>
+                    </div>
+                  )}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              
+              
 
               <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
                 <label className="text-xs text-muted-foreground">Linked Repos (build history only — nothing is executed)</label>
@@ -1081,26 +1125,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
               ) : (
                 <LockedField label="Anthropic API Key" />
               )}
-              {isCredentialsUnlocked ? (
-<div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Google (Gemini) API Key (optional)</label>
-                <Input
-                  type="password"
-                  placeholder="AIza..."
-                  value={googleKey}
-                  onChange={e => {
-                    setGoogleKey(e.target.value);
-                    localStorage.setItem('vicious_google_key', e.target.value);
-                  }}
-                  className="bg-card/80 border-white/10"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Any combination works — Vicious rotates round-robin between whichever keys are set, so no single provider gets hit past its limit.
-                </p>
-              </div>
-              ) : (
-                <LockedField label="Google (Gemini) API Key" />
-              )}
+              
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Session Summary (resume point)</label>
                 <textarea
@@ -1109,52 +1134,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   className="bg-card/80 border border-white/10 rounded-md w-full text-xs p-2 h-32 overflow-y-auto"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Operator Name</label>
-                <Input
-                  placeholder="Operator"
-                  value={userName}
-                  onChange={e => {
-                    setUserName(e.target.value);
-                    localStorage.setItem('vicious_user_name', e.target.value);
-                  }}
-                  className="bg-card/80 border-white/10"
-                />
-              </div>
+              
 
-              {isCredentialsUnlocked ? (
-<div className="space-y-2">
-                <label className="text-xs text-muted-foreground">GitHub Personal Access Token</label>
-                <Input
-                  type="password"
-                  placeholder="ghp_..."
-                  value={githubToken}
-                  onChange={e => {
-                    setGithubToken(e.target.value);
-                    localStorage.setItem('vicious_github_token', e.target.value);
-                  }}
-                  className="bg-card/80 border-white/10"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Needs "repo" scope. Create one at github.com \u2192 Settings \u2192 Developer settings.
-                </p>
-              </div>
-              ) : (
-                <LockedField label="GitHub Personal Access Token" />
-              )}
+              
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">GitHub Repo (owner/repo)</label>
-                <Input
-                  placeholder="yourname/your-repo"
-                  value={githubRepo}
-                  onChange={e => {
-                    setGithubRepo(e.target.value);
-                    localStorage.setItem('vicious_github_repo', e.target.value);
-                  }}
-                  className="bg-card/80 border-white/10"
-                />
-              </div>
+              
 
               {/* Text size */}
               <div className="space-y-2">
@@ -1185,60 +1169,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   <p className="text-xs text-muted-foreground">Speak assistant replies aloud</p>
                 </div>
                 <Switch checked={vocalResponses} onCheckedChange={setVocalResponses} />
-              </div>
-
-              {/* Activation log */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-muted-foreground">Activation Log</label>
-                  {activationLog.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs text-muted-foreground hover:text-white"
-                      onClick={() => setActivationLog([])}
-                    >
-                      Clear
-                    </Button>
-                  )}
-                </div>
-                <ScrollArea className="h-56 rounded-lg border border-white/10 bg-card/80">
-                  <div className="p-3 space-y-2">
-                    {activationLog.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No activations yet.</p>
-                    ) : (
-                      activationLog.map(entry => (
-                        <div key={entry.id} className="flex items-start gap-2 text-xs border-b border-white/5 pb-2 last:border-0 last:pb-0">
-                          <span className={cn(
-                            'shrink-0 rounded px-1.5 py-0.5 font-mono uppercase text-[10px]',
-                            entry.source === 'voice' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground'
-                          )}>
-                            {entry.source}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className="truncate text-foreground/90">{entry.text}</p>
-                            <p className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  {isThinking && (
-                    <div className="flex gap-4 flex-row">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 bg-primary/20 text-primary border border-primary/30">
-                        <Terminal className="w-4 h-4" />
-                      </div>
-                      <Card className="p-4 border-white/5 max-w-[80%] bg-[#1c2226] text-foreground">
-                        <div className="flex gap-1.5 items-center h-4">
-                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]"></span>
-                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]"></span>
-                          <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce"></span>
-                        </div>
-                      </Card>
-                    </div>
-                  )}
-                  </div>
-                </ScrollArea>
               </div>
 
               {/* Accessibility watcher status + diagnostic log */}
