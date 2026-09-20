@@ -224,13 +224,10 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     }
   };
   
-  const [isListening, setIsListening] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [userName, setUserName] = useState('Operator');
-  const [activeTab, setActiveTab] = useState<'chat' | 'reminders' | 'camera' | 'system' | 'history' | 'hub'>('chat');
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [reminders, setReminders] = useState<{ id: string; text: string; time?: string; date?: string }[]>([]);
+  const [activeTab, setActiveTab] = useState<'chat' | 'system' | 'history' | 'hub'>('chat');
   const [apiKey, setApiKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [anthropicKey, setAnthropicKey] = useState('');
@@ -264,8 +261,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const { toast } = useToast();
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const savedName = localStorage.getItem('vicious_user_name');
@@ -325,9 +320,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
       greet();
     }
 
-    const savedReminders = localStorage.getItem('vicious_reminders');
-    if (savedReminders) setReminders(JSON.parse(savedReminders));
-
     const savedTextSize = localStorage.getItem('vicious_text_size') as TextSize | null;
     if (savedTextSize) setTextSize(savedTextSize);
 
@@ -342,10 +334,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     localStorage.setItem('vicious_history', JSON.stringify(messages));
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
-
-  useEffect(() => {
-    localStorage.setItem('vicious_reminders', JSON.stringify(reminders));
-  }, [reminders]);
 
   // Apply text size to the document root so rem-based Tailwind classes scale app-wide
   useEffect(() => {
@@ -565,13 +553,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     // "push to github" / "commit to github" / "save this conversation to github" — pushes the chat transcript
     if (/^(?:push|commit|save)(?: this)?(?: conversation)? to (?:github|the repo|my repo)$/i.test(lower)) {
       return await pushToGithub(formatTranscriptAsMarkdown());
-    }
-
-    // "open camera" / "launch camera" / "take a photo" — use the app's own
-    // camera capture screen (same one the Camera nav icon opens), not a search
-    if (/^(?:open|launch|start)\s+(?:the\s+)?camera$/i.test(lower) || /take a (?:photo|picture|pic)/i.test(lower)) {
-      openCamera();
-      return 'Opening camera...';
     }
 
     // "open files" / "open file manager" — launches the real device file manager
@@ -803,71 +784,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     }
   };
 
-  const startListening = async () => {
-    setIsListening(true);
-    try {
-      const { transcript } = await VixAccessibility.listen();
-      handleCommand(transcript, 'voice');
-    } catch (e: any) {
-      toast({ title: e?.message || 'Could not hear that — try again', variant: 'destructive' });
-    }
-    setIsListening(false);
-  };
-
-  const captureImage = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const context = canvasRef.current.getContext('2d');
-    if (!context) return;
-    canvasRef.current.width = videoRef.current.videoWidth;
-    canvasRef.current.height = videoRef.current.videoHeight;
-    context.drawImage(videoRef.current, 0, 0);
-    const dataUri = canvasRef.current.toDataURL('image/jpeg');
-    stopCamera();
-    addMessage('user', 'Analyzing captured image...', 'image');
-    try {
-      const base64 = dataUri.split(',')[1];
-      const res = await fetch(GROQ_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'qwen/qwen3.6-27b',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
-              { type: 'text', text: 'Describe this image concisely as Vicious Assistant.' },
-            ],
-          }],
-        }),
-      });
-      const data = await res.json();
-      addMessage('assistant', data.choices?.[0]?.message?.content ?? 'Could not analyze image.');
-    } catch (error) {
-      addMessage('system', 'Error analyzing image context.');
-    }
-  };
-
-  const cameraStreamRef = useRef<MediaStream | null>(null);
-
-  const stopCamera = () => {
-    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
-    cameraStreamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setIsCameraOpen(false);
-  };
-
-  const openCamera = async () => {
-    setIsCameraOpen(true);
-    setActiveTab('camera');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      cameraStreamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-    } catch {
-      toast({ title: 'Camera permission denied', variant: 'destructive' });
-      setIsCameraOpen(false);
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen w-full bg-background relative select-none">
@@ -907,8 +823,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
               // "New Session" should clear the visible chat, not that memory.
             }}
           />
-          <NavItem icon={Bell} active={activeTab === 'reminders'} onClick={() => setActiveTab('reminders')} count={reminders.length} />
-          <NavItem icon={Camera} active={activeTab === 'camera'} onClick={openCamera} />
           <NavItem icon={Github} active={activeTab === 'hub'} onClick={() => setActiveTab('hub')} />
           <NavItem icon={Save} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
           <NavItem icon={Settings} active={activeTab === 'system'} onClick={() => setActiveTab('system')} />
@@ -1455,39 +1369,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 )}
               </div>
             </div>
-          ) : activeTab === 'reminders' ? (
-            <div className="flex-1 p-6 space-y-4 overflow-y-auto">
-              <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Reminders</h2>
-              {reminders.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No reminders yet. Try saying or typing something like "remind me to call mom at 5pm".
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {reminders.map(r => (
-                    <Card key={r.id} className="p-4 border-white/5 bg-[#1c2226] flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm text-foreground">{r.text}</p>
-                        {(r.time || r.date) && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {[r.date, r.time].filter(Boolean).join(' \u00b7 ')}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-white"
-                        onClick={() => setReminders(prev => prev.filter(item => item.id !== r.id))}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
           ) : (
             <>
               <ScrollArea className="flex-1 p-6" viewportRef={scrollRef}>
@@ -1524,29 +1405,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   ))}
                 </div>
               </ScrollArea>
-
-              {/* Listening overlay */}
-              {isListening && (
-                <div className="absolute inset-0 bg-background/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center">
-                  <div className="w-32 h-32 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Mic className="w-16 h-16 text-primary" />
-                  </div>
-                  <h2 className="text-3xl font-bold mt-8 text-white tracking-widest uppercase">Listening</h2>
-                  <Button variant="outline" className="mt-12" onClick={() => setIsListening(false)}>Cancel</Button>
-                </div>
-              )}
-
-              {/* Camera overlay */}
-              {isCameraOpen && (
-                <div className="absolute inset-0 bg-black z-50 flex flex-col items-center justify-center">
-                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                  <canvas ref={canvasRef} className="hidden" />
-                  <Button className="absolute top-6 right-6" variant="ghost" size="icon" onClick={stopCamera}>
-                    <X className="w-6 h-6 text-white" />
-                  </Button>
-                  <Button className="absolute bottom-12 w-20 h-20 rounded-full bg-white" onClick={captureImage} />
-                </div>
-              )}
 
               {/* Input */}
               <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
@@ -1591,12 +1449,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Paperclip className="w-5 h-5" />
-                  </Button>
-                  <Button
-                    onClick={startListening}
-                    className={cn('h-14 w-14 rounded-full', isListening ? 'bg-destructive hover:bg-destructive/90' : 'bg-primary hover:bg-primary/90')}
-                  >
-                    {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                   </Button>
                 </div>
               </div>
