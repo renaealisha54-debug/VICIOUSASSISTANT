@@ -843,7 +843,6 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 { id: 'groq', name: 'Groq Console', url: 'https://console.groq.com', pkg: null as string | null, keyValue: apiKey },
                 { id: 'openai', name: 'OpenAI Platform', url: 'https://platform.openai.com', pkg: null as string | null, keyValue: openaiKey },
                 { id: 'anthropic', name: 'Anthropic Console', url: 'https://console.anthropic.com', pkg: null as string | null, keyValue: anthropicKey },
-                { id: 'google', name: 'Google AI Studio', url: 'https://aistudio.google.com', pkg: null as string | null, keyValue: googleKey },
               ].map(service => (
                 <div key={service.id} className="bg-card/80 border border-white/10 rounded-md p-3 space-y-2">
                   <div className="flex items-center justify-between">
@@ -890,6 +889,16 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Session History</h2>
                 
               </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Session Summary (resume point)</label>
+                <textarea
+                  readOnly
+                  value={sessionSummary || 'No activity yet this session.'}
+                  className="bg-card/80 border border-white/10 rounded-md w-full text-xs p-2 h-32 overflow-y-auto"
+                />
+              </div>
+
+              
               {/* Activation log */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1126,14 +1135,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 <LockedField label="Anthropic API Key" />
               )}
               
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Session Summary (resume point)</label>
-                <textarea
-                  readOnly
-                  value={sessionSummary || 'No activity yet this session.'}
-                  className="bg-card/80 border border-white/10 rounded-md w-full text-xs p-2 h-32 overflow-y-auto"
-                />
-              </div>
+              
               
 
               
