@@ -1559,7 +1559,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   ))}
                 </div>
                 <div className="max-w-4xl mx-auto flex items-center gap-4">
-                  <div className="relative flex-1">
+                  <div className="relative flex-1 min-w-0">
                     <Textarea
                       placeholder="Execute command or query... (Shift+Enter for a new line)"
                       className="min-h-[70px] max-h-[160px] bg-card/80 border-white/10 pr-12 text-lg resize-y"
