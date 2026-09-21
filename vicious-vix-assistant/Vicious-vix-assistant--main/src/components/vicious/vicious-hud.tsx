@@ -37,6 +37,8 @@ const callGroqFallback = async (userPrompt: string): Promise<string> => {
 };
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Browser } from '@capacitor/browser';
+import { App as CapacitorApp } from '@capacitor/app';
 import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip, Copy, Check, Save, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -332,6 +334,25 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
     const savedLog = localStorage.getItem('vicious_activation_log');
     if (savedLog) setActivationLog(JSON.parse(savedLog));
+  }, []);
+
+  useEffect(() => {
+    const listenerPromise = CapacitorApp.addListener('appUrlOpen', (data: { url: string }) => {
+      try {
+        const url = new URL(data.url);
+        const token = url.searchParams.get('token');
+        if (token) {
+          setGithubToken(token);
+          localStorage.setItem('vicious_github_token', token);
+          toast({ title: 'GitHub connected', description: 'Sign-in successful.' });
+        }
+      } catch (e) {
+        console.warn('Failed to parse OAuth callback URL', e);
+      }
+    });
+    return () => {
+      listenerPromise.then(listener => listener.remove());
+    };
   }, []);
 
   useEffect(() => {
@@ -971,6 +992,25 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   }}
                   className="bg-card/80 border-white/10"
                 />
+              </div>
+
+              <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
+                <label className="text-xs text-muted-foreground">GitHub Sign-In</label>
+                {githubToken ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-green-400">Connected</span>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setGithubToken('');
+                      localStorage.removeItem('vicious_github_token');
+                    }}>Disconnect</Button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={async () => {
+                    const state = Math.random().toString(36).substring(2);
+                    const authUrl = `https://github.com/login/oauth/authorize?client_id=Ov23li0qvIjETm1hV8E8&scope=repo&redirect_uri=https://vicious-backend.vercel.app/api/github/callback&state=${state}`;
+                    await Browser.open({ url: authUrl });
+                  }}>Sign in with GitHub</Button>
+                )}
               </div>
 
               <div className="space-y-2 border border-white/10 rounded-md p-3 bg-card/40">
