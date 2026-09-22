@@ -556,6 +556,40 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     }
   };
 
+  /** Fetches open issues (or PRs) from the linked repo using the OAuth token. */
+  const readGithubIssues = async (wantPRs: boolean): Promise<string> => {
+    if (!githubToken || !githubRepo) {
+      return 'GitHub needs you to sign in with GitHub and set a repo (owner/repo) in Settings first.';
+    }
+    const [owner, repo] = githubRepo.split('/').map(s => s.trim());
+    if (!owner || !repo) {
+      return 'GitHub repo in Settings should be in "owner/repo" format.';
+    }
+
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=10`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github+json',
+    };
+
+    try {
+      const res = await fetch(apiUrl, { headers });
+      if (!res.ok) {
+        const errBody = await res.text();
+        return `GitHub fetch failed (${res.status}): ${errBody.slice(0, 200)}`;
+      }
+      const data = await res.json();
+      const filtered = data.filter((item: any) => wantPRs ? !!item.pull_request : !item.pull_request);
+      if (filtered.length === 0) {
+        return `No open ${wantPRs ? 'pull requests' : 'issues'} in ${owner}/${repo}.`;
+      }
+      const lines = filtered.map((item: any) => `#${item.number} ${item.title} (${item.html_url})`);
+      return `Open ${wantPRs ? 'pull requests' : 'issues'} in ${owner}/${repo}:\n${lines.join('\n')}`;
+    } catch (e: any) {
+      return `GitHub fetch failed: ${e?.message || 'network error'}`;
+    }
+  };
+
   /** Returns a short confirmation message if it handled the command, or null if not. */
   const GITHUB_USERNAME = 'renaealisha54-debug';
   const DEFAULT_GITHUB_REPO = 'VICIOUSASSISTANT';
@@ -578,6 +612,14 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     // "push to github" / "commit to github" / "save this conversation to github" — pushes the chat transcript
     if (/^(?:push|commit|save)(?: this)?(?: conversation)? to (?:github|the repo|my repo)$/i.test(lower)) {
       return await pushToGithub(formatTranscriptAsMarkdown());
+    }
+
+    if (/^(?:show|list|get)?\s*(?:github\s+)?issues$/i.test(lower)) {
+      return await readGithubIssues(false);
+    }
+
+    if (/^(?:show|list|get)?\s*(?:github\s+)?(?:prs|pull requests)$/i.test(lower)) {
+      return await readGithubIssues(true);
     }
 
     // "open files" / "open file manager" — launches the real device file manager
