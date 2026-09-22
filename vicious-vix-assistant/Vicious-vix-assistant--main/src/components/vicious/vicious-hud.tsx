@@ -511,10 +511,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
   /** Creates or updates a file in the user's own GitHub repo via a real API call, using their OAuth token. */
   const pushToGithub = async (content: string, customPath?: string): Promise<string> => {
-    if (!githubToken || !githubRepo) {
-      return 'GitHub push needs you to sign in with GitHub and set a repo (owner/repo) in Settings first.';
+    const effectiveRepo = githubRepo || linkedRepos[0] || '';
+    if (!githubToken || !effectiveRepo) {
+      return 'GitHub push needs you to sign in with GitHub and link a repo (owner/repo) in History tab first.';
     }
-    const [owner, repo] = githubRepo.split('/').map(s => s.trim());
+    const [owner, repo] = effectiveRepo.split('/').map(s => s.trim());
     if (!owner || !repo) {
       return 'GitHub repo in Settings should be in "owner/repo" format.';
     }
@@ -558,10 +559,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
   /** Fetches open issues (or PRs) from the linked repo using the OAuth token. */
   const readGithubIssues = async (wantPRs: boolean): Promise<string> => {
-    if (!githubToken || !githubRepo) {
-      return 'GitHub needs you to sign in with GitHub and set a repo (owner/repo) in Settings first.';
+    const effectiveRepo = githubRepo || linkedRepos[0] || '';
+    if (!githubToken || !effectiveRepo) {
+      return 'GitHub needs you to sign in with GitHub and link a repo (owner/repo) in History tab first.';
     }
-    const [owner, repo] = githubRepo.split('/').map(s => s.trim());
+    const [owner, repo] = effectiveRepo.split('/').map(s => s.trim());
     if (!owner || !repo) {
       return 'GitHub repo in Settings should be in "owner/repo" format.';
     }
