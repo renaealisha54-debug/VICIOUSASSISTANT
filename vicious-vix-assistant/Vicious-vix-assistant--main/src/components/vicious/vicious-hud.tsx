@@ -1440,7 +1440,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
               </ScrollArea>
 
               {/* Input */}
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
+              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background/95 to-transparent" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))', paddingRight: 'calc(1.5rem + env(safe-area-inset-right, 0px))' }}>
                 <div className="max-w-4xl mx-auto mb-2 flex flex-wrap gap-2">
                   {attachedFiles.map((f, idx) => (
                     <div key={idx} className="flex items-center gap-1 text-xs bg-card/80 border border-white/10 rounded-full px-3 py-1">
