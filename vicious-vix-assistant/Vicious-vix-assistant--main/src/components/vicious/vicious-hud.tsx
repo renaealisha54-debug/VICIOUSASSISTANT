@@ -509,10 +509,10 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     return `# Vicious Assistant conversation \u2014 ${new Date().toLocaleString()}\n\n${lines.join('\n\n---\n\n')}`;
   };
 
-  /** Creates or updates a file in the user's own GitHub repo via a real API call, using their PAT. */
+  /** Creates or updates a file in the user's own GitHub repo via a real API call, using their OAuth token. */
   const pushToGithub = async (content: string, customPath?: string): Promise<string> => {
     if (!githubToken || !githubRepo) {
-      return 'GitHub push needs a Personal Access Token and a repo (owner/repo) set in Settings first.';
+      return 'GitHub push needs you to sign in with GitHub and set a repo (owner/repo) in Settings first.';
     }
     const [owner, repo] = githubRepo.split('/').map(s => s.trim());
     if (!owner || !repo) {
