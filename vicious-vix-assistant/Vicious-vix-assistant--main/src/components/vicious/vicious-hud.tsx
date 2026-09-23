@@ -84,44 +84,46 @@ const VICIOUS_SYSTEM_PROMPT = `You are Vicious Assistant: a direct, technically 
 - Stay in a cool, confident, slightly terse tone \u2014 but never sacrifice accuracy or safety for style.
 - If you don't know something or a request is ambiguous, say so plainly instead of guessing.`;
 
-async function callOpenAI(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
+type ChatMsg = { role: 'user' | 'assistant'; content: string };
+
+async function callOpenAI(history: ChatMsg[], key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, ...history] }),
   });
   if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? 'No response.';
 }
 
-async function callAnthropic(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
+async function callAnthropic(history: ChatMsg[], key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: systemPrompt, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: systemPrompt, messages: history }),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.content?.[0]?.text ?? 'No response.';
 }
 
-async function callGoogle(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
+async function callGoogle(history: ChatMsg[], key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: [{ parts: [{ text: prompt }] }] }),
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) }),
   });
   if (!res.ok) throw new Error(`Google ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response.';
 }
 
-async function callGroqRaw(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
+async function callGroqRaw(history: ChatMsg[], key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'system', content: systemPrompt }, ...history] }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -130,20 +132,25 @@ async function callGroqRaw(prompt: string, key: string, systemPrompt: string = V
 
 let vixProviderRotation = 0;
 
-async function askGroq(prompt: string, apiKey: string): Promise<string> {
+async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Promise<string> {
   const openaiKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_openai_key') || '') : '';
   const anthropicKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_anthropic_key') || '') : '';
   const googleKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_google_key') || '') : '';
   const priorSummary = typeof window !== 'undefined' ? (localStorage.getItem('vicious_session_summary') || '') : '';
-  const contextualPrompt = priorSummary
-    ? `Recent session context (for continuity across providers/limits):\n${priorSummary}\n\n---\n\n${prompt}`
-    : prompt;
 
-  const providers: { name: string; key: string; call: (p: string, k: string) => Promise<string> }[] = [
-    { name: 'Groq', key: apiKey, call: callGroqRaw },
-    { name: 'OpenAI', key: openaiKey, call: callOpenAI },
-    { name: 'Anthropic', key: anthropicKey, call: callAnthropic },
-    { name: 'Google', key: googleKey, call: callGoogle },
+  const history: ChatMsg[] = typeof promptOrHistory === 'string'
+    ? [{ role: 'user', content: promptOrHistory }]
+    : promptOrHistory;
+
+  const systemPromptWithSummary = priorSummary
+    ? `${VICIOUS_SYSTEM_PROMPT}\n\nRecent session context (for continuity across providers/limits):\n${priorSummary}`
+    : VICIOUS_SYSTEM_PROMPT;
+
+  const providers: { name: string; key: string; call: (h: ChatMsg[], k: string) => Promise<string> }[] = [
+    { name: 'Groq', key: apiKey, call: (h, k) => callGroqRaw(h, k, systemPromptWithSummary) },
+    { name: 'OpenAI', key: openaiKey, call: (h, k) => callOpenAI(h, k, systemPromptWithSummary) },
+    { name: 'Anthropic', key: anthropicKey, call: (h, k) => callAnthropic(h, k, systemPromptWithSummary) },
+    { name: 'Google', key: googleKey, call: (h, k) => callGoogle(h, k, systemPromptWithSummary) },
   ].filter(p => p.key);
 
   if (providers.length === 0) {
@@ -155,7 +162,7 @@ async function askGroq(prompt: string, apiKey: string): Promise<string> {
     const provider = providers[vixProviderRotation % providers.length];
     vixProviderRotation++;
     try {
-      return await provider.call(contextualPrompt, provider.key);
+      return await provider.call(history, provider.key);
     } catch (e: any) {
       lastError = e;
     }
@@ -846,10 +853,11 @@ Give a concise analysis: what this project/archive appears to be, its structure,
           addMessage('assistant', result);
         }
       } else {
-        const response = await askGroq(
-          `You are Vicious, a coding assistant. Give direct, technically precise answers. Prefer code over prose when relevant, assume the user is a developer, and skip unnecessary preamble: ${text}`,
-          apiKey
-        );
+        const chatHistory: ChatMsg[] = [
+          ...messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          { role: 'user' as const, content: text },
+        ];
+        const response = await askGroq(chatHistory, apiKey);
         addMessage('assistant', response);
         updateSessionSummary(text, response);
       }
