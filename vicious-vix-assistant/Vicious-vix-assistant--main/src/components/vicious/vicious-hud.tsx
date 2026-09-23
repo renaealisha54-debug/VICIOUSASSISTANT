@@ -279,6 +279,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const { toast } = useToast();
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const savedName = localStorage.getItem('vicious_user_name');
@@ -1428,7 +1429,27 @@ Give a concise analysis: what this project/archive appears to be, its structure,
               <ScrollArea className="flex-1 p-6" viewportRef={scrollRef}>
                 <div className="max-w-4xl mx-auto space-y-6" style={{ paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
                   {messages.map(msg => (
-                    <div key={msg.id} className={cn('flex gap-4', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
+                    <div
+                    key={msg.id}
+                    className={cn('flex gap-4', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}
+                    onTouchStart={() => {
+                      longPressTimerRef.current = setTimeout(() => {
+                        copyToClipboard(msg.content, msg.id);
+                      }, 500);
+                    }}
+                    onTouchEnd={() => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    }}
+                    onTouchCancel={() => {
+                      if (longPressTimerRef.current) {
+                        clearTimeout(longPressTimerRef.current);
+                        longPressTimerRef.current = null;
+                      }
+                    }}
+                  >
                       <div className={cn(
                         'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1',
                         msg.role === 'assistant' ? 'bg-primary/20 text-primary border border-primary/30' :
@@ -1438,12 +1459,17 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                         <Terminal className="w-4 h-4" />
                       </div>
                       <Card className={cn(
-                        'p-4 border-white/5 max-w-[80%]',
+                        'relative p-4 border-white/5 max-w-[80%]',
                         msg.role === 'assistant' ? 'bg-[#1c2226] text-foreground' :
                         msg.role === 'system' ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300 text-xs font-mono' :
                         'bg-primary/10 border-primary/20 text-white'
                       )}>
-                        {msg.role === 'assistant' ? renderMessageContent(msg.content) : msg.content}
+                        {copiedId === msg.id && (
+                      <div className="absolute -top-2 -right-2 text-[9px] bg-primary text-white px-2 py-0.5 rounded-full shadow">
+                        Copied
+                      </div>
+                    )}
+                    {msg.role === 'assistant' ? renderMessageContent(msg.content) : msg.content}
                       
                         {msg.role === 'assistant' && (
                           <button
