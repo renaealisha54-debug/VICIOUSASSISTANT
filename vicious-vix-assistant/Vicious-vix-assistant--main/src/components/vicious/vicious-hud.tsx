@@ -932,6 +932,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                 { id: 'groq', name: 'Groq Console', url: 'https://console.groq.com', pkg: null as string | null, keyValue: apiKey },
                 { id: 'openai', name: 'OpenAI Platform', url: 'https://platform.openai.com', pkg: null as string | null, keyValue: openaiKey },
                 { id: 'anthropic', name: 'Anthropic Console', url: 'https://console.anthropic.com', pkg: null as string | null, keyValue: anthropicKey },
+                { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app', pkg: null as string | null, keyValue: googleKey },
               ].map(service => (
                 <div key={service.id} className="bg-card/80 border border-white/10 rounded-md p-3 space-y-2">
                   <div className="flex items-center justify-between">
