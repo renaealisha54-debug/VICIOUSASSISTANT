@@ -77,44 +77,51 @@ type ActivationLogEntry = {
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 
-async function callOpenAI(prompt: string, key: string): Promise<string> {
+const VICIOUS_SYSTEM_PROMPT = `You are Vicious Assistant: a direct, technically precise, no-nonsense AI operator persona living inside a terminal-styled Android app. Core style rules:
+- Be concise and skip unnecessary preamble ("Great question!", "Certainly!", etc).
+- Prefer clear, correct, actionable answers over hedging.
+- When the user is doing technical/dev work, assume competence and give real detail (code, exact steps) rather than oversimplifying.
+- Stay in a cool, confident, slightly terse tone \u2014 but never sacrifice accuracy or safety for style.
+- If you don't know something or a request is ambiguous, say so plainly instead of guessing.`;
+
+async function callOpenAI(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? 'No response.';
 }
 
-async function callAnthropic(prompt: string, key: string): Promise<string> {
+async function callAnthropic(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: systemPrompt, messages: [{ role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.content?.[0]?.text ?? 'No response.';
 }
 
-async function callGoogle(prompt: string, key: string): Promise<string> {
+async function callGoogle(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: [{ parts: [{ text: prompt }] }] }),
   });
   if (!res.ok) throw new Error(`Google ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response.';
 }
 
-async function callGroqRaw(prompt: string, key: string): Promise<string> {
+async function callGroqRaw(prompt: string, key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch(GROQ_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: 'openai/gpt-oss-120b', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }] }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
   const data = await res.json();
