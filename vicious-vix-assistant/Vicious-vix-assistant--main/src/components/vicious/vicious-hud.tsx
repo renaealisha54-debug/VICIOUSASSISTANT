@@ -39,6 +39,7 @@ const callGroqFallback = async (userPrompt: string): Promise<string> => {
 import React, { useState, useEffect, useRef } from 'react';
 import { Browser } from '@capacitor/browser';
 import { App as CapacitorApp } from '@capacitor/app';
+import { testSqliteStore } from '@/lib/kv-store';
 import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip, Copy, Check, Save, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -612,6 +613,10 @@ Give a concise analysis: what this project/archive appears to be, its structure,
 
   const tryDeviceAction = async (text: string): Promise<string | null> => {
     const lower = text.toLowerCase().trim();
+
+    if (lower === 'test sqlite') {
+      return await testSqliteStore();
+    }
 
     // Long pasted text (build logs, terminal output, code, etc.) should never
     // trigger a device-action shortcut just because it happens to contain a
