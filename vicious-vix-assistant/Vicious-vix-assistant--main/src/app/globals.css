@@ -72,3 +72,10 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-muted rounded-full hover:bg-muted-foreground transition-colors;
 }
+/* Prevent chat overflow on mobile */
+.chat-message, pre, code, table {
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  word-break: break-word !important;
+  white-space: pre-wrap !important;
+}
