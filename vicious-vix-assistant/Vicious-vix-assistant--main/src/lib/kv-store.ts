@@ -33,7 +33,7 @@ async function migrateFromLocalStorage(): Promise<void> {
 
 function ensureStore(): Promise<void> {
   if (!readyPromise) {
-    readyPromise = CapgoCapacitorDataStorageSqlite.openStore({ database: DATABASE, table: TABLE })
+    readyPromise = CapgoCapacitorDataStorageSqlite.openStore({ database: DATABASE, table: TABLE, encrypted: true, mode: 'secret' })
       .then(() => CapgoCapacitorDataStorageSqlite.setTable({ table: TABLE }))
       .then(() => migrateFromLocalStorage());
   }
