@@ -1,5 +1,10 @@
 {
   "appId": "com.vixassistant",
   "appName": "Vix Assistant",
-  "webDir": "out"
+  "webDir": "out",
+  "plugins": {
+    "CapgoCapacitorDataStorageSqlite": {
+      "encryptionSecret": "vicious-assistant-local-store-2026"
+    }
+  }
 }
