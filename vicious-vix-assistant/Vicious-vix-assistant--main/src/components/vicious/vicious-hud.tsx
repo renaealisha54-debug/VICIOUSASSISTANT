@@ -39,7 +39,7 @@ const callGroqFallback = async (userPrompt: string): Promise<string> => {
 import React, { useState, useEffect, useRef } from 'react';
 import { Browser } from '@capacitor/browser';
 import { App as CapacitorApp } from '@capacitor/app';
-import { testSqliteStore } from '@/lib/kv-store';
+import { testSqliteStore, kvGet, kvSet, kvRemove } from '@/lib/kv-store';
 import { Mic, MicOff, Camera, MessageSquare, Bell, Settings, Terminal, Github, Phone, X, Search, User, Paperclip, Copy, Check, Save, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -134,10 +134,10 @@ async function callGroqRaw(history: ChatMsg[], key: string, systemPrompt: string
 let vixProviderRotation = 0;
 
 async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Promise<string> {
-  const openaiKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_openai_key') || '') : '';
-  const anthropicKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_anthropic_key') || '') : '';
-  const googleKey = typeof window !== 'undefined' ? (localStorage.getItem('vicious_google_key') || '') : '';
-  const priorSummary = typeof window !== 'undefined' ? (localStorage.getItem('vicious_session_summary') || '') : '';
+  const openaiKey = (await kvGet('vicious_openai_key')) || '';
+  const anthropicKey = (await kvGet('vicious_anthropic_key')) || '';
+  const googleKey = (await kvGet('vicious_google_key')) || '';
+  const priorSummary = (await kvGet('vicious_session_summary')) || '';
 
   const history: ChatMsg[] = typeof promptOrHistory === 'string'
     ? [{ role: 'user', content: promptOrHistory }]
@@ -282,40 +282,41 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const savedName = localStorage.getItem('vicious_user_name');
+    (async () => {
+    const savedName = await kvGet('vicious_user_name');
     if (savedName) setUserName(savedName);
 
-    const savedKey = localStorage.getItem('vicious_api_key');
+    const savedKey = await kvGet('vicious_api_key');
     if (savedKey) setApiKey(savedKey);
 
-    const savedOpenaiKey = localStorage.getItem('vicious_openai_key');
+    const savedOpenaiKey = await kvGet('vicious_openai_key');
     if (savedOpenaiKey) setOpenaiKey(savedOpenaiKey);
 
-    const savedAnthropicKey = localStorage.getItem('vicious_anthropic_key');
+    const savedAnthropicKey = await kvGet('vicious_anthropic_key');
     if (savedAnthropicKey) setAnthropicKey(savedAnthropicKey);
 
-    const savedGoogleKey = localStorage.getItem('vicious_google_key');
+    const savedGoogleKey = await kvGet('vicious_google_key');
     if (savedGoogleKey) setGoogleKey(savedGoogleKey);
 
-    const savedSummary = localStorage.getItem('vicious_session_summary');
+    const savedSummary = await kvGet('vicious_session_summary');
     if (savedSummary) setSessionSummary(savedSummary);
 
-    const savedPin = localStorage.getItem('vicious_settings_pin');
+    const savedPin = await kvGet('vicious_settings_pin');
     if (savedPin) setPinCode(savedPin);
 
-    const savedRepos = localStorage.getItem('vicious_linked_repos');
+    const savedRepos = await kvGet('vicious_linked_repos');
     if (savedRepos) setLinkedRepos(JSON.parse(savedRepos));
 
-    const savedHubNotes = localStorage.getItem('vicious_hub_notes');
+    const savedHubNotes = await kvGet('vicious_hub_notes');
     if (savedHubNotes) setHubNotes(JSON.parse(savedHubNotes));
 
-    const savedGithubToken = localStorage.getItem('vicious_github_token');
+    const savedGithubToken = await kvGet('vicious_github_token');
     if (savedGithubToken) setGithubToken(savedGithubToken);
 
-    const savedGithubRepo = localStorage.getItem('vicious_github_repo');
+    const savedGithubRepo = await kvGet('vicious_github_repo');
     if (savedGithubRepo) setGithubRepo(savedGithubRepo);
 
-    const savedMessages = localStorage.getItem('vicious_history');
+    const savedMessages = await kvGet('vicious_history');
     if (savedMessages) {
       setMessages(JSON.parse(savedMessages).map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
     } else {
@@ -339,17 +340,18 @@ Give a concise analysis: what this project/archive appears to be, its structure,
       greet();
     }
 
-    const savedTextSize = localStorage.getItem('vicious_text_size') as TextSize | null;
+    const savedTextSize = (await kvGet('vicious_text_size')) as TextSize | null;
     if (savedTextSize) setTextSize(savedTextSize);
 
-    const savedVocal = localStorage.getItem('vicious_vocal_responses');
+    const savedVocal = await kvGet('vicious_vocal_responses');
     if (savedVocal) setVocalResponses(savedVocal === 'true');
 
-    const savedOwnerEmail = localStorage.getItem('vicious_github_owner_email');
+    const savedOwnerEmail = await kvGet('vicious_github_owner_email');
     if (savedOwnerEmail) setGithubOwnerEmail(savedOwnerEmail);
 
-    const savedLog = localStorage.getItem('vicious_activation_log');
+    const savedLog = await kvGet('vicious_activation_log');
     if (savedLog) setActivationLog(JSON.parse(savedLog));
+    })();
   }, []);
 
   useEffect(() => {
@@ -1431,7 +1433,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   {messages.map(msg => (
                     <div
                     key={msg.id}
-                    className={cn('flex gap-4', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}
+                    className={cn('flex gap-4 min-w-0', msg.role === 'user' ? 'flex-row-reverse' : 'flex-row')}
                     onTouchStart={() => {
                       longPressTimerRef.current = setTimeout(() => {
                         copyToClipboard(msg.content, msg.id);
@@ -1459,7 +1461,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                         <Terminal className="w-4 h-4" />
                       </div>
                       <Card className={cn(
-                        'relative p-4 border-white/5 max-w-[80%]',
+                        'relative p-4 border-white/5 max-w-[80%] min-w-0',
                         msg.role === 'assistant' ? 'bg-[#1c2226] text-foreground' :
                         msg.role === 'system' ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300 text-xs font-mono' :
                         'bg-primary/10 border-primary/20 text-white'
