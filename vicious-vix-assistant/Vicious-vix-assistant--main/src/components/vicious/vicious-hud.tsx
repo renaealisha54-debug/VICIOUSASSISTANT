@@ -361,7 +361,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
         const token = url.searchParams.get('token');
         if (token) {
           setGithubToken(token);
-          localStorage.setItem('vicious_github_token', token);
+          kvSet('vicious_github_token', token);
           toast({ title: 'GitHub connected', description: 'Sign-in successful.' });
         }
       } catch (e) {
@@ -374,22 +374,22 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('vicious_history', JSON.stringify(messages));
+    kvSet('vicious_history', JSON.stringify(messages));
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
   // Apply text size to the document root so rem-based Tailwind classes scale app-wide
   useEffect(() => {
     document.documentElement.style.fontSize = TEXT_SIZE_PX[textSize];
-    localStorage.setItem('vicious_text_size', textSize);
+    kvSet('vicious_text_size', textSize);
   }, [textSize]);
 
   useEffect(() => {
-    localStorage.setItem('vicious_vocal_responses', String(vocalResponses));
+    kvSet('vicious_vocal_responses', String(vocalResponses));
   }, [vocalResponses]);
 
   useEffect(() => {
-    localStorage.setItem('vicious_activation_log', JSON.stringify(activationLog));
+    kvSet('vicious_activation_log', JSON.stringify(activationLog));
   }, [activationLog]);
 
   const speak = (text: string) => {
@@ -741,7 +741,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     setSessionSummary(prev => {
       const entry = `\n[${new Date().toLocaleString()}]\nYou: ${userText}\nVicious: ${assistantText.slice(0, 300)}`;
       const combined = (prev + entry).slice(-4000);
-      localStorage.setItem('vicious_session_summary', combined);
+      kvSet('vicious_session_summary', combined);
       return combined;
     });
   };
@@ -774,14 +774,14 @@ Give a concise analysis: what this project/archive appears to be, its structure,
     if (!name || linkedRepos.includes(name)) return;
     const updated = [...linkedRepos, name];
     setLinkedRepos(updated);
-    localStorage.setItem('vicious_linked_repos', JSON.stringify(updated));
+    kvSet('vicious_linked_repos', JSON.stringify(updated));
     setNewRepoInput('');
   };
 
   const removeLinkedRepo = (name: string) => {
     const updated = linkedRepos.filter(r => r !== name);
     setLinkedRepos(updated);
-    localStorage.setItem('vicious_linked_repos', JSON.stringify(updated));
+    kvSet('vicious_linked_repos', JSON.stringify(updated));
   };
 
   const handleImportHistory = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -812,7 +812,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
   const updateHubNote = (id: string, value: string) => {
     setHubNotes(prev => {
       const updated = { ...prev, [id]: value };
-      localStorage.setItem('vicious_hub_notes', JSON.stringify(updated));
+      kvSet('vicious_hub_notes', JSON.stringify(updated));
       return updated;
     });
   };
@@ -908,7 +908,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
             active={false}
             onClick={() => {
               setMessages([]);
-              localStorage.setItem('vicious_history', JSON.stringify([]));
+              kvSet('vicious_history', JSON.stringify([]));
               setActiveTab('chat');
               // sessionSummary is deliberately left untouched here — it's the
               // cross-session continuity memory fed into every AI call, and
@@ -1056,7 +1056,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   value={githubOwnerEmail}
                   onChange={e => {
                     setGithubOwnerEmail(e.target.value);
-                    localStorage.setItem('vicious_github_owner_email', e.target.value);
+                    kvSet('vicious_github_owner_email', e.target.value);
                   }}
                   className="bg-card/80 border-white/10"
                 />
@@ -1069,7 +1069,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                     <span className="text-xs text-green-400">Connected</span>
                     <Button size="sm" variant="outline" onClick={() => {
                       setGithubToken('');
-                      localStorage.removeItem('vicious_github_token');
+                      kvRemove('vicious_github_token');
                     }}>Disconnect</Button>
                   </div>
                 ) : (
@@ -1171,7 +1171,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                     />
                     <Button size="sm" onClick={() => {
                       if (pinSetupInput.trim()) {
-                        localStorage.setItem('vicious_settings_pin', pinSetupInput.trim());
+                        kvSet('vicious_settings_pin', pinSetupInput.trim());
                         setPinCode(pinSetupInput.trim());
                         setIsCredentialsUnlocked(true);
                         setPinSetupInput('');
@@ -1217,7 +1217,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   value={apiKey}
                   onChange={e => {
                     setApiKey(e.target.value);
-                    localStorage.setItem('vicious_api_key', e.target.value);
+                    kvSet('vicious_api_key', e.target.value);
                   }}
                   className="bg-card/80 border-white/10"
                 />
@@ -1234,7 +1234,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   value={openaiKey}
                   onChange={e => {
                     setOpenaiKey(e.target.value);
-                    localStorage.setItem('vicious_openai_key', e.target.value);
+                    kvSet('vicious_openai_key', e.target.value);
                   }}
                   className="bg-card/80 border-white/10"
                 />
@@ -1251,13 +1251,30 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   value={anthropicKey}
                   onChange={e => {
                     setAnthropicKey(e.target.value);
-                    localStorage.setItem('vicious_anthropic_key', e.target.value);
+                    kvSet('vicious_anthropic_key', e.target.value);
                   }}
                   className="bg-card/80 border-white/10"
                 />
               </div>
               ) : (
                 <LockedField label="Anthropic API Key" />
+              )}
+              {isCredentialsUnlocked ? (
+<div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Google API Key (optional)</label>
+                <Input
+                  type="password"
+                  placeholder="AIza..."
+                  value={googleKey}
+                  onChange={e => {
+                    setGoogleKey(e.target.value);
+                    kvSet('vicious_google_key', e.target.value);
+                  }}
+                  className="bg-card/80 border-white/10"
+                />
+              </div>
+              ) : (
+                <LockedField label="Google API Key" />
               )}
               
               
