@@ -224,7 +224,9 @@ Give a concise analysis: what this project/archive appears to be, its structure,
       addMessage('assistant', response);
       updateSessionSummary(processed.name, response);
     } catch (e: any) {
-      addMessage('system', `Error analyzing zip: ${e.message}`);
+      console.error('Zip analysis failed:', e);
+      const detail = e?.name ? `${e.name}: ${e.message}` : String(e?.message || e);
+      addMessage('system', `Error analyzing zip: ${detail}`);
     }
   };
 
