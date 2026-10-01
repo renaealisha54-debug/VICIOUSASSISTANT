@@ -209,6 +209,7 @@ export function ViciousHUD() {
     const fileList = files.map(f => f.name).join('\n');
     const sampleContents = files.slice(0, 3).map(f => `--- ${f.name} ---\n${f.content.slice(0, 300)}${f.content.length > 300 ? '\n... (truncated)' : ''}`).join('\n\n');
     addMessage('user', `Analyzing ${processed.name} (${files.length} files)...`);
+    await new Promise(resolve => setTimeout(resolve, 1500));
     try {
       const response = await askGroq(
         `You are Vicious Assistant. A zip file named "${processed.name}" was uploaded and extracted, containing ${files.length} files.
