@@ -207,7 +207,7 @@ export function ViciousHUD() {
     }
     const files = processed.extractedFiles ?? [];
     const fileList = files.map(f => f.name).join('\n');
-    const sampleContents = files.slice(0, 10).map(f => `--- ${f.name} ---\n${f.content.slice(0, 800)}${f.content.length > 800 ? '\n... (truncated)' : ''}`).join('\n\n');
+    const sampleContents = files.slice(0, 3).map(f => `--- ${f.name} ---\n${f.content.slice(0, 300)}${f.content.length > 300 ? '\n... (truncated)' : ''}`).join('\n\n');
     addMessage('user', `Analyzing ${processed.name} (${files.length} files)...`);
     try {
       const response = await askGroq(
