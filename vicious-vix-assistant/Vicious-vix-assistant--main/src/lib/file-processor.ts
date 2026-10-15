@@ -35,7 +35,11 @@ export async function processUploadedFile(file: File): Promise<ProcessedFile> {
       if (!zipEntry.dir) {
         try {
           const textContent = await zipEntry.async("string");
-          extractedFiles.push({ name: relativePath, content: textContent.slice(0, MAX_CONTENT_CHARS) });
+          const isLikelyBinary = textContent.includes("\u0000") || /[\x00-\x08\x0E-\x1F]/.test(textContent.slice(0, 1000));
+          extractedFiles.push({
+            name: relativePath,
+            content: isLikelyBinary ? "[binary content skipped]" : textContent.slice(0, MAX_CONTENT_CHARS)
+          });
         } catch {
           extractedFiles.push({ name: relativePath, content: "[binary or unreadable]" });
         }

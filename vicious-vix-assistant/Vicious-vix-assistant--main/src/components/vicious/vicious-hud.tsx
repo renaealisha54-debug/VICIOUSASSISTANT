@@ -158,17 +158,17 @@ async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Pro
     throw new Error('No API key set. Go to Settings and enter at least one provider key.');
   }
 
-  let lastError: any = null;
+  const providerErrors: string[] = [];
   for (let attempt = 0; attempt < providers.length; attempt++) {
     const provider = providers[vixProviderRotation % providers.length];
     vixProviderRotation++;
     try {
       return await provider.call(history, provider.key);
     } catch (e: any) {
-      lastError = e;
+      providerErrors.push(`${provider.name}: ${e?.message || e}`);
     }
   }
-  throw lastError ?? new Error('All configured providers failed.');
+  throw new Error(providerErrors.join(' | ') || 'All configured providers failed.');
 }
 
 // ---------------------------------------------------------------------------
