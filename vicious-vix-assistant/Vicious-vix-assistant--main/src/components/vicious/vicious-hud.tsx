@@ -85,7 +85,18 @@ const VICIOUS_SYSTEM_PROMPT = `You are Vicious Assistant: a direct, technically 
 - Stay in a cool, confident, slightly terse tone \u2014 but never sacrifice accuracy or safety for style.
 - If you don't know something or a request is ambiguous, say so plainly instead of guessing.`;
 
-type ChatMsg = { role: 'user' | 'assistant'; content: string };
+type ChatMsg = { role: 'user' | 'assistant'; content: string; images?: string[] };
+
+function toAnthropicMsg(m: ChatMsg): any {
+  if (!m.images || m.images.length === 0) return { role: m.role, content: m.content };
+  const blocks: any[] = [];
+  for (const url of m.images) {
+    const match = /^data:([^;]+);base64,(.+)$/.exec(url);
+    if (match) blocks.push({ type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } });
+  }
+  blocks.push({ type: 'text', text: m.content || 'Describe this image.' });
+  return { role: m.role, content: blocks };
+}
 
 async function callOpenAI(history: ChatMsg[], key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -101,8 +112,8 @@ async function callOpenAI(history: ChatMsg[], key: string, systemPrompt: string 
 async function callAnthropic(history: ChatMsg[], key: string, systemPrompt: string = VICIOUS_SYSTEM_PROMPT): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: systemPrompt, messages: history }),
+    headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 1024, system: systemPrompt, messages: history.map(toAnthropicMsg) }),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -153,7 +164,7 @@ async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Pro
     { name: 'OpenAI', key: openaiKey, call: (h, k) => callOpenAI(h, k, systemPromptWithSummary) },
     { name: 'Anthropic', key: anthropicKey, call: (h, k) => callAnthropic(h, k, systemPromptWithSummary) },
     { name: 'Google', key: googleKey, call: (h, k) => callGoogle(h, k, systemPromptWithSummary) },
-  ].filter(p => p.key);
+  ].filter(p => p.key && (!history.some(m => m.images && m.images.length > 0) || p.name === 'Anthropic'));
 
   if (providers.length === 0) {
     throw new Error('No API key set. Go to Settings and enter at least one provider key.');
@@ -867,9 +878,10 @@ Give a concise analysis: what this project/archive appears to be, its structure,
       } else {
         const chatHistory: ChatMsg[] = [
           ...messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-          { role: 'user' as const, content: text },
+          { role: 'user' as const, content: text, images: attachedFiles.filter(f => f.type === 'image').map(f => f.content as string) },
         ];
         const response = await askGroq(chatHistory, apiKey);
+        setAttachedFiles(prev => prev.filter(f => f.type !== 'image'));
         addMessage('assistant', response);
         updateSessionSummary(text, response);
       }
