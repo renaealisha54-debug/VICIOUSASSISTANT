@@ -143,7 +143,7 @@ async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Pro
     ? [{ role: 'user', content: promptOrHistory }]
     : promptOrHistory;
 
-  const baseSystemPrompt = `${VICIOUS_SYSTEM_PROMPT}\n\nCommand formatting rules: put shell commands in a fenced bash block, one command per line, no inline # comments, plain ASCII quotes only. Every command must be directly pasteable into Termux.`;
+  const baseSystemPrompt = `${VICIOUS_SYSTEM_PROMPT}\n\nCommand formatting rules: put shell commands in a fenced bash block, one command per line, no inline # comments, plain ASCII quotes only. Every command must be directly pasteable into Termux. For directory trees and file listings, keep each line under 40 characters, put no trailing comments on lines, and explain the entries in a short list after the block instead.`;
   const systemPromptWithSummary = priorSummary
     ? `${baseSystemPrompt}\n\nRecent session context (for continuity across providers/limits):\n${priorSummary}`
     : baseSystemPrompt;
@@ -1540,7 +1540,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".zip"
+                    accept=".zip,image/*"
                     multiple
                     className="hidden"
                     onChange={handleFileUpload}
