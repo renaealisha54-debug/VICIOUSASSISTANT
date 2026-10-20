@@ -88,7 +88,7 @@ class VixAccessibilityService : AccessibilityService() {
     private fun onResponseDelayDetected(pkg: String, idleMs: Long) {
         askGroqDiagnosis(pkg, idleMs) { userReply, diagnosis ->
             if (userReply != null) {
-                typeIntoFocusedField(userReply)
+                // log-only: never type into other apps
             }
             VixLogStore.append(
                 applicationContext,
