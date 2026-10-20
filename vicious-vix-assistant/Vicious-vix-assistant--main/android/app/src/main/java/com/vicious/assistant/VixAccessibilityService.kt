@@ -48,11 +48,19 @@ class VixAccessibilityService : AccessibilityService() {
         val GROQ_API_KEY = BuildConfig.GROQ_API_KEY
         const val GROQ_MODEL = "openai/gpt-oss-120b"
         private const val TAG = "VixAccessibility"
+        val IGNORED_PACKAGES = setOf(
+            "com.android.systemui",
+            "android",
+            "com.sec.android.app.launcher",
+            "com.google.android.inputmethod.latin",
+            "com.samsung.android.honeyboard"
+        )
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
         val pkg = event.packageName?.toString() ?: return
+        if (pkg in IGNORED_PACKAGES || pkg == applicationContext.packageName) return
 
         if (pkg != currentPackage) {
             currentPackage = pkg
@@ -198,6 +206,10 @@ class VixAccessibilityService : AccessibilityService() {
     fun typeIntoFocusedField(text: String) {
         val root: AccessibilityNodeInfo = rootInActiveWindow ?: return
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return
+        if (focused.isPassword) return
+        if (!focused.isShowingHintText && !focused.text.isNullOrEmpty()) return
+        if (focused.isPassword) return
+        if (!focused.isShowingHintText && !focused.text.isNullOrEmpty()) return
         val arguments = android.os.Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
