@@ -143,9 +143,10 @@ async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Pro
     ? [{ role: 'user', content: promptOrHistory }]
     : promptOrHistory;
 
+  const baseSystemPrompt = `${VICIOUS_SYSTEM_PROMPT}\n\nCommand formatting rules: put shell commands in a fenced bash block, one command per line, no inline # comments, plain ASCII quotes only. Every command must be directly pasteable into Termux.`;
   const systemPromptWithSummary = priorSummary
-    ? `${VICIOUS_SYSTEM_PROMPT}\n\nRecent session context (for continuity across providers/limits):\n${priorSummary}`
-    : VICIOUS_SYSTEM_PROMPT;
+    ? `${baseSystemPrompt}\n\nRecent session context (for continuity across providers/limits):\n${priorSummary}`
+    : baseSystemPrompt;
 
   const providers: { name: string; key: string; call: (h: ChatMsg[], k: string) => Promise<string> }[] = [
     { name: 'Groq', key: apiKey, call: (h, k) => callGroqRaw(h, k, systemPromptWithSummary) },
@@ -1448,7 +1449,7 @@ Give a concise analysis: what this project/archive appears to be, its structure,
             </div>
           ) : (
             <>
-              <ScrollArea className="flex-1 p-6" viewportRef={scrollRef}>
+              <ScrollArea className="flex-1 p-6 [&_[data-radix-scroll-area-viewport]>div]:!block" viewportRef={scrollRef}>
                 <div className="max-w-4xl mx-auto space-y-6" style={{ paddingBottom: 'calc(8rem + env(safe-area-inset-bottom, 0px))' }}>
                   {messages.map(msg => (
                     <div
@@ -1599,13 +1600,12 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
   const [copied, setCopied] = React.useState(false);
   const handleCopy = async () => {
     try {
-      // Strip a leading "$ " or "# " prompt marker from each line, if present,
-      // so what gets pasted is a real, directly-runnable command rather than
-      // something that fails on a stray prompt character.
-      const cleaned = code
-        .split('\n')
-        .map(line => line.replace(/^\s*[$#]\s?/, ''))
-        .join('\n');
+      // Only strip a "$ " shell-prompt marker when EVERY non-empty line has one.
+      // "#" lines are comments and are never modified.
+      const lines = code.split('\n');
+      const nonEmpty = lines.filter(l => l.trim() !== '');
+      const allPrompted = nonEmpty.length > 0 && nonEmpty.every(l => /^\s*\$\s/.test(l));
+      const cleaned = allPrompted ? lines.map(l => l.replace(/^(\s*)\$\s/, '$1')).join('\n') : code;
       await navigator.clipboard.writeText(cleaned);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
@@ -1614,7 +1614,7 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
     }
   };
   return (
-    <div className="relative my-2 rounded-lg overflow-hidden border border-white/10 bg-black/60">
+    <div className="relative my-2 max-w-full min-w-0 rounded-lg overflow-hidden border border-white/10 bg-black/60">
       <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 text-[10px] uppercase tracking-wide text-muted-foreground">
         <span>{language || 'code'}</span>
         <button
@@ -1626,7 +1626,7 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre className="p-3 overflow-x-auto text-xs font-mono whitespace-pre-wrap break-words">
+      <pre className="p-3 max-w-full overflow-x-auto text-xs font-mono whitespace-pre-wrap break-words">
         <code>{code}</code>
       </pre>
     </div>
