@@ -124,7 +124,7 @@ async function callGoogle(history: ChatMsg[], key: string, systemPrompt: string 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) }),
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [...(m.images || []).flatMap(u => { const mm = /^data:([^;]+);base64,(.+)$/.exec(u); return mm ? [{ inline_data: { mime_type: mm[1], data: mm[2] } }] : []; }), { text: m.content || 'Describe this image.' }] })) }),
   });
   if (!res.ok) throw new Error(`Google ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -164,7 +164,7 @@ async function askGroq(promptOrHistory: string | ChatMsg[], apiKey: string): Pro
     { name: 'OpenAI', key: openaiKey, call: (h, k) => callOpenAI(h, k, systemPromptWithSummary) },
     { name: 'Anthropic', key: anthropicKey, call: (h, k) => callAnthropic(h, k, systemPromptWithSummary) },
     { name: 'Google', key: googleKey, call: (h, k) => callGoogle(h, k, systemPromptWithSummary) },
-  ].filter(p => p.key && (!history.some(m => m.images && m.images.length > 0) || p.name === 'Anthropic'));
+  ].filter(p => p.key && (!history.some(m => m.images && m.images.length > 0) || p.name === 'Anthropic' || p.name === 'Google'));
 
   if (providers.length === 0) {
     throw new Error('No API key set. Go to Settings and enter at least one provider key.');
